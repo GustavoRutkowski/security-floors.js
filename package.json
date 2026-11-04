@@ -1,0 +1,38 @@
+{
+    "name": "security-floors.js",
+    "version": "1.0.0",
+    "description": "Jogo de navegador voltado para o ensino gameficado de princípios de segurança da informação.",
+    "license": "MIT",
+    "author": {
+        "name": "Gustavo Rutkowski Lara",
+        "email": "rutkowskigustavo@gmail.com",
+        "url": "https://github.com/GustavoRutkowski"
+    },
+    "type": "module",
+    "scripts": {
+        "db:init": "node --env-file-if-exists=.env --input-type=module -e \"import('./db/connection.js')\"",
+        "lint": "eslint .",
+        "format": "prettier --write \"**/*.{js,json,md,yaml,yml,html,css}\"",
+        "format:check": "prettier --check \"**/*.{js,json,md,yaml,yml,html,css}\""
+    },
+    "lint-staged": {
+        "*.{js,json}": [
+            "eslint --fix",
+            "prettier --write"
+        ]
+    },
+    "dependencies": {
+        "better-sqlite3": "^12.2.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "concurrently": "^9.2.1",
+        "eslint": "^10.2.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^16.0.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.4.0",
+        "nodemon": "^3.1.14",
+        "prettier": "^3.8.1"
+    }
+}

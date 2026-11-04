@@ -1,0 +1,90 @@
+[
+    {
+        "id": 1,
+        "prompt": "Qual sinal deve levantar suspeita ao receber um link por e-mail?",
+        "options": [
+            "O endereco do link nao corresponde ao dominio oficial esperado",
+            "A mensagem foi enviada durante o horario comercial",
+            "O texto da mensagem usa uma saudacao pelo nome"
+        ],
+        "correct_option_index": 0,
+        "explanation": "Confira o dominio de destino antes de abrir links, mesmo quando a mensagem parece legitima."
+    },
+    {
+        "id": 2,
+        "prompt": "Qual pratica ajuda a criar senhas fortes e diferentes para cada servico?",
+        "options": [
+            "Reutilizar uma senha longa em todas as contas",
+            "Usar um gerenciador de senhas para criar e guardar senhas unicas",
+            "Trocar letras por simbolos em uma senha curta reutilizada"
+        ],
+        "correct_option_index": 1,
+        "explanation": "Senhas unicas reduzem o impacto caso uma das contas seja comprometida."
+    },
+    {
+        "id": 3,
+        "prompt": "Voce recebe varias solicitacoes inesperadas de aprovacao de login no celular. O que fazer?",
+        "options": [
+            "Aprovar uma delas para interromper as notificacoes",
+            "Ignorar as solicitacoes e reporta-las ao suporte ou seguranca",
+            "Compartilhar o codigo recebido com um colega"
+        ],
+        "correct_option_index": 1,
+        "explanation": "Solicitacoes inesperadas podem indicar tentativas de acesso com sua senha."
+    },
+    {
+        "id": 4,
+        "prompt": "Ao usar uma rede Wi-Fi publica, qual cuidado e recomendado?",
+        "options": [
+            "Desativar atualizacoes de seguranca",
+            "Evitar operacoes sensiveis em redes nao confiaveis e usar os meios seguros aprovados pela organizacao",
+            "Confiar em qualquer pagina que exiba um cadeado"
+        ],
+        "correct_option_index": 1,
+        "explanation": "Uma conexao HTTPS ajuda, mas nao torna confiavel a rede ou o site por si so."
+    },
+    {
+        "id": 5,
+        "prompt": "Voce encontra um pendrive sem identificacao no escritorio. Qual e a melhor atitude?",
+        "options": [
+            "Conecta-lo para descobrir quem e o dono",
+            "Entrega-lo ao suporte ou a equipe responsavel, sem conecta-lo",
+            "Usa-lo apenas em um computador pessoal"
+        ],
+        "correct_option_index": 1,
+        "explanation": "Midias desconhecidas podem conter arquivos maliciosos."
+    },
+    {
+        "id": 6,
+        "prompt": "O que significa aplicar o principio do menor privilegio?",
+        "options": [
+            "Dar a cada pessoa somente os acessos necessarios para seu trabalho",
+            "Conceder acesso administrativo para evitar pedidos futuros",
+            "Manter acessos antigos mesmo depois de uma mudanca de funcao"
+        ],
+        "correct_option_index": 0,
+        "explanation": "A limitacao de acessos reduz riscos de erro e de uso indevido."
+    },
+    {
+        "id": 7,
+        "prompt": "Uma pessoa liga dizendo ser do suporte e pede sua senha para resolver um problema urgente. O que fazer?",
+        "options": [
+            "Informar a senha se a pessoa souber seu nome",
+            "Recusar o pedido e contatar o suporte por um canal oficial conhecido",
+            "Enviar a senha por mensagem para confirmar sua identidade"
+        ],
+        "correct_option_index": 1,
+        "explanation": "Suporte legitimo nao deve pedir sua senha. Verifique a solicitacao por um canal independente."
+    },
+    {
+        "id": 8,
+        "prompt": "Voce vai se afastar do computador em um espaco compartilhado. O que deve fazer?",
+        "options": [
+            "Bloquear a tela antes de sair",
+            "Deixar a tela aberta se for voltar logo",
+            "Pedir a outra pessoa para vigiar sua sessao"
+        ],
+        "correct_option_index": 0,
+        "explanation": "Bloquear a tela impede que outras pessoas usem sua sessao durante sua ausencia."
+    }
+]
