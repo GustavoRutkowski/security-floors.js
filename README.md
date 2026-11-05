@@ -63,7 +63,7 @@ O contrato planejado para mensagens WebSocket, sincronização de salas/partidas
 
 O tooling usa Phaser, Vite e `ws`. `npm run dev` executa Vite e o processo WS em paralelo; `npm run dev:web` e `npm run dev:ws` iniciam cada processo separadamente. A interface Vite usa a pasta `web/`; host e porta de desenvolvimento são definidos por `VITE_HOST` e `VITE_PORT` (padrões `0.0.0.0` e `5173`). Preview usa `VITE_PREVIEW_HOST` e `VITE_PREVIEW_PORT` (padrões `0.0.0.0` e `4173`). O cliente lê `VITE_WS_URL`; o servidor WS escuta em `WS_HOST` e `WS_PORT` (padrões `0.0.0.0` e `3001`). `npm run build` gera a versão de produção em `dist/`, e `npm run preview` serve esse build localmente.
 
-O servidor WS inicia sem API HTTP e encerra de forma graciosa em `SIGINT`/`SIGTERM`. Nesta etapa ele aceita conexões e trata erros/fechamentos; os handlers do protocolo de salas e partidas serão adicionados nas etapas seguintes.
+O servidor WS inicia sem API HTTP e encerra de forma graciosa em `SIGINT`/`SIGTERM`. Já estão disponíveis `session.hello`, `room.create` e `rooms.list.request`; as demais ações de sala/partida serão adicionadas nas próximas etapas. O setup local deve incluir `db/questions.json` antes de iniciar `npm run dev:ws` ou `npm run dev`.
 
 Antes de concluir alterações, rode as verificações pertinentes:
 

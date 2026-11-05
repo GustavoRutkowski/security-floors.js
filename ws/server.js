@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createPresenceState } from './presence.js';
+import { attachRoomProtocol } from './room-protocol.js';
 
 const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = 3001;
@@ -23,7 +24,8 @@ export function createWebSocketServer({
     host,
     port,
     logger = console,
-    presence = createPresenceState()
+    presence = createPresenceState(),
+    database
 } = {}) {
     const defaults = getWebSocketConfig();
     const server = new WebSocketServer({
@@ -31,6 +33,7 @@ export function createWebSocketServer({
         port: port ?? defaults.port
     });
     server.presence = presence;
+    attachRoomProtocol(server, { database, presence, logger });
 
     server.on('connection', socket => {
         logger.info('WebSocket client connected');
@@ -86,7 +89,8 @@ export function closeWebSocketServer(server) {
 }
 
 async function runServer() {
-    const server = await startWebSocketServer();
+    const { default: database } = await import('../db/connection.js');
+    const server = await startWebSocketServer({ database });
     let shuttingDown = false;
 
     const shutdown = signal => {
