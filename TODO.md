@@ -9,7 +9,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-01** `fix: use the example question catalog consistently` — Manter `db/questions.example.json` como modelo e `db/questions.json` como catálogo efetivo, sincronizando-o por UPSERT e importando somente os cinco campos da questão.
 - [x] **MVP-02** `test: add database bootstrap tests` — Adicionar testes com `node:test` para schema, formato exato das questões, validação de alternativas/índice correto e carga idempotente do catálogo; expor `npm test`.
 - [x] **MVP-03** `docs: define the websocket message contract` — Documentar eventos cliente-servidor e servidor-cliente, payloads, erros e transições de tela; especificar que o servidor nunca envia `correct_option_index` antes de avaliar a resposta.
-- [ ] **MVP-04** `docs: settle MVP edge-case rules` — Registrar decisões para limite de espectadores, desconexão/reconexão, owner desconectado durante partida, empate no ranking, limite de tempo, catálogo insuficiente para preencher a partida e ordem de cadernos individual por jogador.
+- [x] **MVP-04** `docs: settle MVP edge-case rules` — Definir espectador após eliminação, reconexão de 30s, handoff do owner, desempate, deadline, catálogo mínimo, permutação individual e vitória do último desconectado no mata-mata.
 - [ ] **MVP-05** `build: add Phaser Vite and websocket tooling` — Adicionar Phaser, Vite e biblioteca WebSocket do servidor, scripts de desenvolvimento/build/teste e execução conjunta de web e WS; manter a arquitetura sem Express.
 - [ ] **MVP-06** `feat: bootstrap the browser game` — Criar a página de entrada e inicializar o cliente JavaScript/Phaser com redimensionamento, tela de carregamento e tratamento visível de erro.
 - [ ] **MVP-07** `feat: bootstrap the websocket server` — Implementar início e encerramento limpos do servidor WS, configuração de porta e tratamento de conexão; não adicionar API HTTP.
@@ -22,16 +22,16 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [ ] **MVP-11** `feat: handle room joining and leaving` — Implementar entrada e saída de salas, rejeitar salas inexistentes/cheias/em partida quando aplicável e transmitir a lista atual de participantes.
 - [ ] **MVP-12** `feat: implement owner room controls` — Permitir ao owner editar configurações permitidas e iniciar a partida; rejeitar as mesmas ações quando enviadas por outro jogador.
 - [ ] **MVP-13** `feat: implement owner handoff and empty-room cleanup` — Ao sair ou desconectar o owner, transferir a propriedade ao jogador elegível mais antigo; apagar do SQLite a sala que ficar sem jogadores.
-- [ ] **MVP-14** `feat: implement spectator participation` — Permitir assistir sem controlar personagem, responder questões ou afetar ranking; aplicar a política de capacidade definida em `MVP-04`.
+- [ ] **MVP-14** `feat: implement spectator participation` — Converter jogadores eliminados do mata-mata em espectadores invisíveis que acompanham o campo de visão de outro jogador ativo; não permitir entrada externa como espectador.
 
 ## Estado e regras da partida
 
 - [ ] **MVP-15** `feat: distribute questions randomly per match` — Criar a distribuição autoritativa de questões por andar/caderno a cada partida, sem gravar posicionamento no catálogo; embaralhar rótulos/ordem de cadernos por jogador e testar a distribuição com aleatoriedade injetável.
 - [ ] **MVP-16** `feat: synchronize authoritative player movement` — Implementar movimento em oito direções no servidor, limites do mapa e broadcast do estado validado aos participantes; ignorar comandos de espectadores.
 - [ ] **MVP-17** `feat: implement classic mode progression` — Avaliar respostas no servidor, avançar com acerto em qualquer caderno e aplicar espera de `S` segundos após errar todos os cadernos do andar.
-- [ ] **MVP-18** `feat: implement deathmatch elimination` — Usar um caderno por andar, eliminar imediatamente quem errar e encerrar quando as questões terminarem ou restar um jogador.
-- [ ] **MVP-19** `feat: implement match timers and termination` — Aplicar tempo limite configurado ou partida sem limite; no modo clássico, encerrar quando todos chegarem ao topo ou quando o tempo terminar; cobrir corridas entre timeout e última resposta.
-- [ ] **MVP-20** `feat: calculate and broadcast live rankings` — Priorizar quem alcança primeiro o andar final no clássico, definir desempate determinístico, transmitir atualizações e não permitir que o cliente envie pontuação.
+- [ ] **MVP-18** `feat: implement deathmatch elimination` — Usar um caderno por andar, eliminar imediatamente quem errar e encerrar quando as questões terminarem, restar um jogador ou vencer o último desconectado.
+- [ ] **MVP-19** `feat: implement match timers and termination` — Aplicar limite estrito ao deadline ou partida sem limite; encerrar por tempo/condição de vitória e cobrir corridas entre timeout e última resposta.
+- [ ] **MVP-20** `feat: calculate and broadcast live rankings` — Priorizar quem alcança primeiro o andar final no clássico, aplicar desempates definidos em `RULES.md`, transmitir atualizações e não permitir que o cliente envie pontuação.
 - [ ] **MVP-21** `feat: return completed matches to the room` — Encerrar a sessão de jogo, retornar todos à sala, limpar estado transitório e permitir que o owner autorize uma nova partida.
 
 ## Cliente e telas

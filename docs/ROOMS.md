@@ -18,7 +18,7 @@ Para criar uma sala o usuário deve:
 
 ## Entrando em uma sala
 
-Para entrar em uma sala, o usuário deve escolher uma das salas na tela inicial e então entrar (caso haja espaço sobrando).
+Para entrar em uma sala, o usuário deve escolher uma das salas na tela inicial e então entrar como jogador (caso haja espaço sobrando). Não existe entrada externa como espectador; o modo espectador é reservado aos jogadores eliminados durante o mata-mata. Vagas desconectadas ficam reservadas por 30 segundos para reconexão.
 
 ## Life-Cycle de uma sala
 

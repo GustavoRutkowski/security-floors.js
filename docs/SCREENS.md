@@ -34,3 +34,5 @@ Aqui é tudo o jogo em si, partida rolando, movimentação, mecânicas definidas
 No fim da partida todos os players voltam para `RoomScreen`
 
 Movimentos aceitos e mudanças no ranking são transmitidos imediatamente por `player.moved` e `ranking.updated`, respectivamente. O contrato completo está em `WEBSOCKET.md`.
+
+No mata-mata, um jogador eliminado fica invisível para os jogadores ativos e pode acompanhar o campo de visão de qualquer jogador ainda na partida. Não há entrada na sala com a finalidade de assistir.
