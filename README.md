@@ -57,6 +57,8 @@ npm run db:init
 
 O servidor WebSocket e a interface do jogo ainda não foram implementados, então não há um comando para iniciar uma partida neste setup inicial.
 
+O contrato planejado para mensagens WebSocket, sincronização de salas/partidas, consulta periódica da lista de salas, erros e transições de tela está em [`docs/WEBSOCKET.md`](docs/WEBSOCKET.md).
+
 Antes de concluir alterações, rode as verificações pertinentes:
 
 ```sh

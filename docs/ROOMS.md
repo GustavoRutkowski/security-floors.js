@@ -2,6 +2,8 @@
 
 O usuário ao entrar no sistema pode criar uma sala ou entrar em uma sala já existente.
 
+O protocolo de mensagens, payloads, erros e sincronização da sala está definido em [`WEBSOCKET.md`](WEBSOCKET.md). Mudanças na configuração e na quantidade/identidade de participantes são enviadas imediatamente a todos os membros conectados por `room.snapshot`; a lista de salas é consultada sob demanda e periodicamente na Home.
+
 ## Criando uma sala
 
 Para criar uma sala o usuário deve:
