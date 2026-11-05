@@ -55,7 +55,7 @@ npm run db:init
 
 `db/questions.example.json` é um modelo versionado. Copie-o para `db/questions.json` e mantenha nesse arquivo o catálogo real, que é ignorado pelo Git e carregado por `db:init` no banco SQLite definido por `DB_PATH`. Em cada inicialização, as questões são inseridas ou atualizadas por `id`, e registros ausentes do catálogo são removidos; owners não definem questões. Cada questão importa somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`. O servidor sorteia em tempo de jogo o andar e o caderno em que cada questão aparece; a numeração e a ordem exibidas podem ser embaralhadas por jogador. O modo pertence à sala, e não à questão.
 
-O servidor WebSocket e a interface do jogo ainda não foram implementados, então não há um comando para iniciar uma partida neste setup inicial.
+O bootstrap da interface já está disponível: `npm run dev:web` abre a tela inicial Phaser. O servidor WebSocket e os fluxos de perfil/salas ainda serão implementados nas próximas etapas, então a tela não inicia partidas nem conecta ao WS.
 
 O contrato planejado para mensagens WebSocket, sincronização de salas/partidas, consulta periódica da lista de salas, erros e transições de tela está em [`docs/WEBSOCKET.md`](docs/WEBSOCKET.md).
 

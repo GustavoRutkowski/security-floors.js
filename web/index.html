@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="theme-color" content="#10191c" />
+        <meta
+            name="description"
+            content="Security Floors, um jogo de perguntas sobre segurança da informação."
+        />
+        <title>Security Floors</title>
+    </head>
+    <body>
+        <div class="app-frame">
+            <header class="topbar">
+                <a class="brand" href="/" aria-label="Security Floors, início">
+                    <span class="brand-mark" aria-hidden="true">SF</span>
+                    <span class="brand-name">SECURITY<br /><strong>FLOORS</strong></span>
+                </a>
+                <div class="topbar-meta">
+                    <span class="build-tag">CLIENT BUILD / 00</span>
+                    <span class="system-state" role="status" aria-live="polite">
+                        <span class="state-lamp" aria-hidden="true"></span>
+                        <span id="boot-status">INICIALIZANDO</span>
+                    </span>
+                </div>
+            </header>
+
+            <main class="main-grid">
+                <section class="world-panel" aria-labelledby="floor-title">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">MAPA / ZONA 00</p>
+                            <h1 id="floor-title">HALL DE ENTRADA</h1>
+                        </div>
+                        <div class="floor-stamp" aria-label="Andar zero">
+                            <span>FLOOR</span>
+                            <strong>00</strong>
+                        </div>
+                    </div>
+
+                    <div class="playfield-frame">
+                        <div
+                            id="game-root"
+                            role="img"
+                            aria-label="Vista superior do hall de entrada"
+                        >
+                            <div id="loading-layer" class="loading-layer" aria-live="polite">
+                                <span class="loader-chip" aria-hidden="true"></span>
+                                <p>CARREGANDO ANDAR</p>
+                                <span class="loading-track" aria-hidden="true"><i></i></span>
+                            </div>
+                            <div id="boot-error" class="boot-error" role="alert" hidden>
+                                <span class="error-code">BOOT ERROR / 00</span>
+                                <h2>O jogo não iniciou</h2>
+                                <p id="boot-error-detail">
+                                    Ocorreu um erro ao preparar a tela. Recarregue para tentar
+                                    novamente.
+                                </p>
+                                <a class="retry-link" href="/">RECARREGAR</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <footer class="world-footer">
+                        <span
+                            ><i class="status-dot" aria-hidden="true"></i> VISUALIZAÇÃO LOCAL</span
+                        >
+                        <span>COORD. <strong>00 : 00</strong></span>
+                    </footer>
+                </section>
+
+                <aside class="status-panel" aria-label="Estado do cliente">
+                    <div class="status-heading">
+                        <p class="eyebrow">TERMINAL / 001</p>
+                        <span class="online-mark">LOCAL</span>
+                    </div>
+
+                    <div class="elevator-block" aria-hidden="true">
+                        <div class="elevator-rail">
+                            <span class="floor-level active"><b>00</b><i></i></span>
+                            <span class="floor-level"><b>01</b><i></i></span>
+                            <span class="floor-level"><b>02</b><i></i></span>
+                            <span class="floor-level"><b>03</b><i></i></span>
+                        </div>
+                        <span class="elevator-label">ELEVADOR</span>
+                    </div>
+
+                    <dl class="diagnostics">
+                        <div>
+                            <dt>RENDER</dt>
+                            <dd id="renderer-status">AGUARDANDO</dd>
+                        </div>
+                        <div>
+                            <dt>SESSÃO</dt>
+                            <dd>INATIVA</dd>
+                        </div>
+                        <div>
+                            <dt>REDE</dt>
+                            <dd>DESCONECTADA</dd>
+                        </div>
+                    </dl>
+
+                    <div class="panel-note">
+                        <span class="note-mark" aria-hidden="true">!</span>
+                        <p>TERMINAL DE JOGO<br /><strong>PRONTO PARA INICIALIZAÇÃO</strong></p>
+                    </div>
+                </aside>
+            </main>
+
+            <footer class="page-footer">
+                <span>SECURITY FLOORS <span class="footer-divider">/</span> PROTÓTIPO</span>
+                <span>CLIENTE LOCAL <span class="footer-divider">/</span> SEM SESSÃO</span>
+            </footer>
+        </div>
+
+        <noscript>
+            <p class="noscript-message">Ative JavaScript para inicializar Security Floors.</p>
+        </noscript>
+
+        <script>
+            window.showBootError = function (reason) {
+                const panel = document.getElementById('boot-error');
+                const loading = document.getElementById('loading-layer');
+                const status = document.getElementById('boot-status');
+                const renderer = document.getElementById('renderer-status');
+                const details = document.getElementById('boot-error-detail');
+
+                if (!panel) return;
+
+                panel.hidden = false;
+                loading.hidden = true;
+                status.textContent = 'FALHA NO BOOT';
+                renderer.textContent = 'ERRO';
+                if (reason && reason.message) details.textContent = reason.message;
+            };
+
+            window.addEventListener('error', event => window.showBootError(event.error));
+            window.addEventListener('unhandledrejection', event =>
+                window.showBootError(event.reason)
+            );
+        </script>
+        <script type="module" src="/main.js"></script>
+    </body>
+</html>

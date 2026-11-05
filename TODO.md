@@ -11,7 +11,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-03** `docs: define the websocket message contract` — Documentar eventos cliente-servidor e servidor-cliente, payloads, erros e transições de tela; especificar que o servidor nunca envia `correct_option_index` antes de avaliar a resposta.
 - [x] **MVP-04** `docs: settle MVP edge-case rules` — Definir espectador após eliminação, reconexão de 30s, handoff do owner, desempate, deadline, catálogo mínimo, permutação individual e vitória do último desconectado no mata-mata.
 - [x] **MVP-05** `build: add Phaser Vite and websocket tooling` — Adicionar Phaser, Vite e biblioteca WebSocket do servidor, scripts de desenvolvimento/build/teste e execução conjunta de web e WS; manter a arquitetura sem Express.
-- [ ] **MVP-06** `feat: bootstrap the browser game` — Criar a página de entrada e inicializar o cliente JavaScript/Phaser com redimensionamento, tela de carregamento e tratamento visível de erro.
+- [x] **MVP-06** `feat: bootstrap the browser game` — Criar a página de entrada e inicializar o cliente JavaScript/Phaser com redimensionamento, tela de carregamento e tratamento visível de erro.
 - [ ] **MVP-07** `feat: bootstrap the websocket server` — Implementar início e encerramento limpos do servidor WS, configuração de porta e tratamento de conexão; não adicionar API HTTP.
 
 ## Salas e presença
