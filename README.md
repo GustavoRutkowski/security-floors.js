@@ -61,9 +61,9 @@ O contrato planejado para mensagens WebSocket, sincronização de salas/partidas
 
 ## Desenvolvimento web e WebSocket
 
-O tooling usa Phaser, Vite e `ws`. `npm run dev` executa Vite e o processo WS em paralelo; `npm run dev:web` e `npm run dev:ws` iniciam cada processo separadamente. A interface Vite usa a pasta `web/`; host e porta de desenvolvimento são definidos por `VITE_HOST` e `VITE_PORT` (padrões `0.0.0.0` e `5173`). Preview usa `VITE_PREVIEW_HOST` e `VITE_PREVIEW_PORT` (padrões `0.0.0.0` e `4173`). O cliente lê `VITE_WS_URL`, e o servidor WS usa `WS_PORT` (padrão `3001`). `npm run build` gera a versão de produção em `dist/`, e `npm run preview` serve esse build localmente.
+O tooling usa Phaser, Vite e `ws`. `npm run dev` executa Vite e o processo WS em paralelo; `npm run dev:web` e `npm run dev:ws` iniciam cada processo separadamente. A interface Vite usa a pasta `web/`; host e porta de desenvolvimento são definidos por `VITE_HOST` e `VITE_PORT` (padrões `0.0.0.0` e `5173`). Preview usa `VITE_PREVIEW_HOST` e `VITE_PREVIEW_PORT` (padrões `0.0.0.0` e `4173`). O cliente lê `VITE_WS_URL`; o servidor WS escuta em `WS_HOST` e `WS_PORT` (padrões `0.0.0.0` e `3001`). `npm run build` gera a versão de produção em `dist/`, e `npm run preview` serve esse build localmente.
 
-Os comandos de desenvolvimento e build ficam preparados para as próximas etapas do MVP; a página web e o servidor WS serão implementados em MVP-06 e MVP-07.
+O servidor WS inicia sem API HTTP e encerra de forma graciosa em `SIGINT`/`SIGTERM`. Nesta etapa ele aceita conexões e trata erros/fechamentos; os handlers do protocolo de salas e partidas serão adicionados nas etapas seguintes.
 
 Antes de concluir alterações, rode as verificações pertinentes:
 

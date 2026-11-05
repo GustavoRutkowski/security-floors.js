@@ -12,7 +12,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-04** `docs: settle MVP edge-case rules` — Definir espectador após eliminação, reconexão de 30s, handoff do owner, desempate, deadline, catálogo mínimo, permutação individual e vitória do último desconectado no mata-mata.
 - [x] **MVP-05** `build: add Phaser Vite and websocket tooling` — Adicionar Phaser, Vite e biblioteca WebSocket do servidor, scripts de desenvolvimento/build/teste e execução conjunta de web e WS; manter a arquitetura sem Express.
 - [x] **MVP-06** `feat: bootstrap the browser game` — Criar a página de entrada e inicializar o cliente JavaScript/Phaser com redimensionamento, tela de carregamento e tratamento visível de erro.
-- [ ] **MVP-07** `feat: bootstrap the websocket server` — Implementar início e encerramento limpos do servidor WS, configuração de porta e tratamento de conexão; não adicionar API HTTP.
+- [x] **MVP-07** `feat: bootstrap the websocket server` — Implementar início e encerramento limpos do servidor WS, configuração de host/porta e tratamento de conexão; não adicionar API HTTP.
 
 ## Salas e presença
 
