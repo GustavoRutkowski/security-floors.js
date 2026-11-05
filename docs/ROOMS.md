@@ -35,7 +35,7 @@ O cilo de vida de uma sala consiste em:
 - Se o owner sair, esse UUID é atribuído ao player mais antigo que estava na sala
 - Se não houverem mais players na sala, a sala deve ser deletada do banco.
 
-A transferência de owner e a exclusão persistente da sala vazia são implementadas na MVP-13.
+A saída do owner transfere a propriedade ao membro restante presente há mais tempo; quando a desconexão expira, o ownership passa ao participante conectado há mais tempo. No lobby e no clássico, a expiração remove a presença; em mata-mata durante a partida, mantém o membro para o fluxo de espectador. A sala é removida do SQLite e da memória quando não restam participantes.
 
 ## Quanto uma partida acaba
 

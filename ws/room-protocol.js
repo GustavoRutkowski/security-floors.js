@@ -88,6 +88,60 @@ function broadcastRoomSnapshot(server, database, presence, roomId, requester, re
     }
 }
 
+function findRoomOwnerCandidate(presence, roomId, departingUserId, connectedOnly) {
+    return getRoomPresence(presence, roomId).players.find(
+        player => player.userId !== departingUserId && (!connectedOnly || player.connected)
+    );
+}
+
+function transferRoomOwner(database, presence, room, departingUserId, connectedOnly) {
+    if (!room || room.owner_id !== departingUserId) return false;
+
+    const candidate = findRoomOwnerCandidate(presence, room.id, departingUserId, connectedOnly);
+    if (!candidate) return false;
+
+    updateRoom(database, room.id, { owner_id: candidate.userId });
+    presence.rooms.get(room.id).revision += 1;
+    return true;
+}
+
+function removeRoomParticipant(database, presence, roomId, userId, connectedOnlyForHandoff) {
+    const roomPresence = presence.rooms.get(roomId);
+    if (!roomPresence || !roomPresence.playerIds.has(userId)) return null;
+
+    const room = database ? listRooms(database).find(candidate => candidate.id === roomId) : null;
+    const willBeEmpty = roomPresence.playerIds.size === 1;
+    if (willBeEmpty && database) {
+        deleteRoom(database, roomId);
+    } else if (room && room.owner_id === userId) {
+        transferRoomOwner(database, presence, room, userId, connectedOnlyForHandoff);
+    }
+
+    const result = leaveRoomPresence(presence, roomId, userId);
+    if (result?.roomEmpty) deletePresenceRoom(presence, roomId);
+    return result;
+}
+
+function handleReconnectExpired({ player, roomId }, server, database, presence, logger) {
+    if (!roomId || !database || !presence.rooms.has(roomId)) return;
+
+    try {
+        const room = listRooms(database).find(candidate => candidate.id === roomId);
+        if (!room) return;
+
+        if (room.status === 'playing' && room.mode === 'deathmatch') {
+            transferRoomOwner(database, presence, room, player.userId, true);
+            broadcastRoomSnapshot(server, database, presence, roomId);
+            return;
+        }
+
+        const result = removeRoomParticipant(database, presence, roomId, player.userId, true);
+        if (result && !result.roomEmpty) broadcastRoomSnapshot(server, database, presence, roomId);
+    } catch (error) {
+        logger.error('Failed to handle reconnect expiry:', error.message);
+    }
+}
+
 function ensurePresenceRooms(database, presence) {
     for (const room of listRooms(database)) {
         if (!presence.rooms.has(room.id)) createPresenceRoom(presence, room.id, room.mode);
@@ -308,14 +362,14 @@ function handleRoomLeave(socket, payload, requestId, server, database, presence,
 
     const roomId = player.roomId;
     try {
-        const result = leaveRoomPresence(presence, roomId, socket.userId);
+        const result = removeRoomParticipant(database, presence, roomId, socket.userId, false);
         if (!result) {
             sendError(socket, 'NOT_IN_ROOM', 'Você não está nesta sala.', requestId);
             return;
         }
 
         send(socket, 'room.left', { room_id: roomId }, requestId);
-        if (database && presence.rooms.has(roomId)) {
+        if (database && !result.roomEmpty) {
             broadcastRoomSnapshot(server, database, presence, roomId);
         }
     } catch (error) {
@@ -453,6 +507,15 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
 
 export function attachRoomProtocol(server, { database, presence, logger = console }) {
     if (database) ensurePresenceRooms(database, presence);
+    const previousReconnectHandler = presence.onReconnectExpired;
+    presence.onReconnectExpired = event => {
+        try {
+            previousReconnectHandler(event);
+        } catch (error) {
+            logger.error('Reconnect expiry listener failed:', error.message);
+        }
+        handleReconnectExpired(event, server, database, presence, logger);
+    };
     server.on('connection', socket =>
         attachSocketProtocol(socket, { server, database, presence, logger })
     );

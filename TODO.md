@@ -21,7 +21,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-10** `feat: handle room creation and listing` — Implementar eventos WS para criar salas e listar/atualizar a lista, validando dados no servidor e retornando erros previsíveis.
 - [x] **MVP-11** `feat: handle room joining and leaving` — Implementar entrada e saída de salas, rejeitar salas inexistentes/cheias/em partida quando aplicável e transmitir a lista atual de participantes.
 - [x] **MVP-12** `feat: implement owner room controls` — Permitir ao owner editar configurações permitidas e iniciar a partida; rejeitar as mesmas ações quando enviadas por outro jogador.
-- [ ] **MVP-13** `feat: implement owner handoff and empty-room cleanup` — Ao sair ou desconectar o owner, transferir a propriedade ao jogador elegível mais antigo; apagar do SQLite a sala que ficar sem jogadores.
+- [x] **MVP-13** `feat: implement owner handoff and empty-room cleanup` — Ao sair ou desconectar o owner, transferir a propriedade ao jogador elegível mais antigo; apagar do SQLite a sala que ficar sem jogadores.
 - [ ] **MVP-14** `feat: implement spectator participation` — Converter jogadores eliminados do mata-mata em espectadores invisíveis que acompanham o campo de visão de outro jogador ativo; não permitir entrada externa como espectador.
 
 ## Estado e regras da partida

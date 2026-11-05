@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { createRoom, updateRoom } from '../db/rooms.js';
+import { createPresenceState } from '../ws/presence.js';
 import { startWebSocketServer, closeWebSocketServer } from '../ws/server.js';
 
 const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
@@ -15,6 +16,7 @@ const playerId = '11111111-1111-4111-8111-111111111111';
 
 let database;
 let server;
+let disconnectTimers;
 const clients = new Set();
 
 async function connectClient() {
@@ -92,7 +94,24 @@ async function hello(client, id = playerId) {
 beforeEach(async () => {
     database = new Database(':memory:');
     database.exec(schema);
-    server = await startWebSocketServer({ host: '127.0.0.1', port: 0, database, logger });
+    disconnectTimers = [];
+    const presence = createPresenceState({
+        setTimeoutFn(callback, delay) {
+            const timer = { callback, delay, cleared: false, unref() {} };
+            disconnectTimers.push(timer);
+            return timer;
+        },
+        clearTimeoutFn(timer) {
+            timer.cleared = true;
+        }
+    });
+    server = await startWebSocketServer({
+        host: '127.0.0.1',
+        port: 0,
+        database,
+        logger,
+        presence
+    });
 });
 
 afterEach(async () => {
@@ -524,5 +543,193 @@ describe('room creation and listing WebSocket events', () => {
             payload: {}
         });
         assert.equal(repeatedStart.payload.code, 'ROOM_IN_PROGRESS');
+    });
+
+    it('transfers ownership on leave and deletes the room after its final player leaves', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-handoff',
+            payload: {
+                name: 'Handoff',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 3
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const firstGuest = await connectClient();
+        const firstGuestId = '22222222-2222-4222-8222-222222222222';
+        await hello(firstGuest, firstGuestId);
+        await sendRequest(firstGuest, {
+            type: 'room.join',
+            request_id: 'join-for-handoff',
+            payload: { room_id: roomId }
+        });
+
+        const secondGuest = await connectClient();
+        const secondGuestId = '33333333-3333-4333-8333-333333333333';
+        await hello(secondGuest, secondGuestId);
+        await sendRequest(secondGuest, {
+            type: 'room.join',
+            request_id: 'join-for-second-handoff',
+            payload: { room_id: roomId }
+        });
+
+        const firstHandoff = waitForMessage(firstGuest, 'room.snapshot');
+        const secondGuestFirstSnapshot = waitForMessage(secondGuest, 'room.snapshot');
+        const ownerLeft = await sendRequest(owner, {
+            type: 'room.leave',
+            request_id: 'owner-leaves',
+            payload: {}
+        });
+        const firstHandoffSnapshot = await firstHandoff;
+        await secondGuestFirstSnapshot;
+        assert.equal(ownerLeft.type, 'room.left');
+        assert.equal(firstHandoffSnapshot.payload.room.owner_id, firstGuestId);
+        assert.equal(database.prepare('SELECT owner_id FROM rooms').get().owner_id, firstGuestId);
+
+        const secondHandoff = waitForMessage(secondGuest, 'room.snapshot');
+        await sendRequest(firstGuest, {
+            type: 'room.leave',
+            request_id: 'first-owner-leaves',
+            payload: {}
+        });
+        assert.equal((await secondHandoff).payload.room.owner_id, secondGuestId);
+
+        const finalLeave = await sendRequest(secondGuest, {
+            type: 'room.leave',
+            request_id: 'final-player-leaves',
+            payload: {}
+        });
+        assert.equal(finalLeave.type, 'room.left');
+        assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 0);
+        assert.equal(server.presence.rooms.has(roomId), false);
+        assert.equal(server.presence.players.get(secondGuestId).roomId, null);
+    });
+
+    it('hands off the owner and removes expired lobby members', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-disconnect-handoff',
+            payload: {
+                name: 'Disconnect handoff',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-for-disconnect-handoff',
+            payload: { room_id: roomId }
+        });
+
+        const disconnectSnapshot = waitForMessage(guest, 'room.snapshot');
+        const ownerSocket = server.presence.connections.get(playerId);
+        const ownerSocketClosed = once(ownerSocket, 'close');
+        owner.close();
+        await ownerSocketClosed;
+        await disconnectSnapshot;
+        const guestUpdate = waitForMessage(guest, 'room.snapshot');
+        const ownerTimer = disconnectTimers.find(timer => !timer.cleared);
+        assert.equal(ownerTimer.delay, 30_000);
+        ownerTimer.callback();
+
+        const snapshot = await guestUpdate;
+        assert.equal(snapshot.payload.room.owner_id, guestId);
+        assert.deepEqual(
+            snapshot.payload.participants.map(participant => participant.user_id),
+            [guestId]
+        );
+        assert.equal(database.prepare('SELECT owner_id FROM rooms').get().owner_id, guestId);
+        assert.equal(server.presence.players.get(playerId).roomId, null);
+    });
+
+    it('deletes an empty room when its last disconnected player expires', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-empty-cleanup',
+            payload: {
+                name: 'Empty after timeout',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const ownerSocket = server.presence.connections.get(playerId);
+        const ownerSocketClosed = once(ownerSocket, 'close');
+        owner.close();
+        await ownerSocketClosed;
+        disconnectTimers.find(timer => !timer.cleared).callback();
+
+        assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 0);
+        assert.equal(server.presence.rooms.has(roomId), false);
+        assert.equal(server.presence.players.get(playerId).roomId, null);
+    });
+
+    it('transfers an expired deathmatch owner without removing their match membership', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-deathmatch-for-handoff',
+            payload: {
+                name: 'Deathmatch handoff',
+                mode: 'deathmatch',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-deathmatch-for-handoff',
+            payload: { room_id: roomId }
+        });
+        updateRoom(database, roomId, { status: 'playing' });
+
+        const disconnectSnapshot = waitForMessage(guest, 'room.snapshot');
+        const ownerSocket = server.presence.connections.get(playerId);
+        const ownerSocketClosed = once(ownerSocket, 'close');
+        owner.close();
+        await ownerSocketClosed;
+        await disconnectSnapshot;
+        const guestUpdate = waitForMessage(guest, 'room.snapshot');
+        disconnectTimers.find(timer => !timer.cleared).callback();
+
+        const snapshot = await guestUpdate;
+        assert.equal(snapshot.payload.room.owner_id, guestId);
+        assert.deepEqual(
+            snapshot.payload.participants.map(participant => participant.user_id),
+            [playerId, guestId]
+        );
+        assert.equal(server.presence.players.get(playerId).roomId, roomId);
+        assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 1);
     });
 });
