@@ -6,6 +6,8 @@ O protocolo de mensagens, payloads, erros e sincronização da sala está defini
 
 As operações persistentes parametrizadas estão em `db/rooms.js`: criação, listagem (com filtro opcional por estado), atualização parcial de configuração/owner/estado e remoção. A presença dos participantes não é persistida nessa camada.
 
+No lobby, somente o owner pode atualizar nome, modo, andares, cadernos por andar, limite de tempo e máximo de jogadores; o limite não pode ser reduzido abaixo da ocupação atual. Somente o owner pode iniciar uma sala `waiting`, e o servidor exige que o catálogo tenha questões distintas suficientes para a configuração antes de mudar o status para `playing`. Os comandos e seus broadcasts estão definidos em [`WEBSOCKET.md`](WEBSOCKET.md).
+
 O estado online é mantido em memória por instância WS em `ws/presence.js`: conexões, participantes, espectadores eliminados, ordem de entrada e janela de reconexão. Ele não grava dados de usuário ou presença no SQLite.
 
 ## Criando uma sala

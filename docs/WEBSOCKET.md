@@ -35,7 +35,9 @@ O cliente envia intenções, nunca estado calculado: não envia posição absolu
 
 `room.join` e `room.leave` exigem `request_id`. Repetir `room.join` na mesma sala retorna o snapshot atual sem duplicar o participante; entrar em uma segunda sala sem sair da primeira é rejeitado. `room.join` não aceita um campo de papel: não existe entrada externa como espectador.
 
-`room.configure` pode conter somente os campos a alterar; campos omitidos permanecem inalterados. `time_limit_seconds: null` significa tempo ilimitado. Todos entram na sala como jogadores; somente após eliminacao no mata-mata o servidor muda o participante para espectador. Espectadores não podem movimentar personagens nem responder questões.
+`room.configure` pode conter somente `name`, `mode`, `floors`, `notebooks_per_floor`, `time_limit_seconds` e `max_players`; campos omitidos permanecem inalterados. Somente o owner pode configurar uma sala `waiting`, e o novo limite de jogadores não pode ficar abaixo da quantidade atual de participantes. `time_limit_seconds: null` significa tempo ilimitado. `match.start` também é exclusivo do owner e só inicia uma sala `waiting`; antes disso, o servidor exige questões distintas suficientes para todos os espaços da partida conforme `RULES.md`. Todos entram na sala como jogadores; somente após eliminacao no mata-mata o servidor muda o participante para espectador. Espectadores não podem movimentar personagens nem responder questões.
+
+Ao aceitar `match.start`, o servidor altera o status persistido para `playing`, envia `match.started` aos participantes conectados e publica o novo `room.snapshot`. A distribuição das questões e o estado inicial de gameplay são adicionados pelas etapas de implementação da partida.
 
 ## Servidor para cliente
 

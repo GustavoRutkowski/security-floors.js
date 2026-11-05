@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { createRoom, deleteRoom, listRooms } from '../db/rooms.js';
+import { createRoom, deleteRoom, listRooms, updateRoom } from '../db/rooms.js';
 import {
     connectPlayer,
     createPresenceRoom,
@@ -21,6 +21,7 @@ const ROOM_CREATE_FIELDS = new Set([
     'time_limit_seconds',
     'max_players'
 ]);
+const ROOM_CONFIGURE_FIELDS = new Set(ROOM_CREATE_FIELDS);
 
 function isRecord(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -323,6 +324,133 @@ function handleRoomLeave(socket, payload, requestId, server, database, presence,
     }
 }
 
+function handleRoomConfigure(socket, payload, requestId, server, database, presence, logger) {
+    if (
+        !isRecord(payload) ||
+        Object.keys(payload).length === 0 ||
+        !hasOnlyFields(payload, ROOM_CONFIGURE_FIELDS)
+    ) {
+        sendError(socket, 'INVALID_ROOM_SETTINGS', 'Configuração da sala inválida.', requestId);
+        return;
+    }
+    if (!database) {
+        sendError(socket, 'INTERNAL_ERROR', 'Persistência de salas indisponível.', requestId, true);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+
+    const room = listRooms(database).find(candidate => candidate.id === player.roomId);
+    if (!room) {
+        sendError(socket, 'ROOM_NOT_FOUND', 'A sala não existe ou já foi removida.', requestId);
+        return;
+    }
+    if (room.owner_id !== socket.userId) {
+        sendError(socket, 'NOT_ROOM_OWNER', 'Somente o owner pode alterar a sala.', requestId);
+        return;
+    }
+    if (room.status !== 'waiting') {
+        sendError(socket, 'ROOM_IN_PROGRESS', 'A partida desta sala já começou.', requestId);
+        return;
+    }
+
+    try {
+        const roomPresence = presence.rooms.get(room.id);
+        if (
+            payload.max_players !== undefined &&
+            payload.max_players < roomPresence.playerIds.size
+        ) {
+            throw new RangeError('max_players cannot be lower than the current player count');
+        }
+
+        const updatedRoom = updateRoom(database, room.id, payload);
+        roomPresence.mode = updatedRoom.mode;
+        roomPresence.revision += 1;
+        broadcastRoomSnapshot(server, database, presence, room.id, socket, requestId);
+    } catch (error) {
+        const settingsError = error instanceof TypeError || error instanceof RangeError;
+        if (!settingsError) logger.error('Failed to configure room:', error.message);
+        sendError(
+            socket,
+            settingsError ? 'INVALID_ROOM_SETTINGS' : 'INTERNAL_ERROR',
+            settingsError ? error.message : 'Não foi possível atualizar a sala.',
+            requestId,
+            !settingsError
+        );
+    }
+}
+
+function handleMatchStart(socket, payload, requestId, server, database, presence, logger) {
+    if (!isRecord(payload) || Object.keys(payload).length !== 0) {
+        sendError(socket, 'INVALID_MESSAGE', 'match.start não aceita parâmetros.', requestId);
+        return;
+    }
+    if (!database) {
+        sendError(socket, 'INTERNAL_ERROR', 'Persistência de salas indisponível.', requestId, true);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+
+    const room = listRooms(database).find(candidate => candidate.id === player.roomId);
+    if (!room) {
+        sendError(socket, 'ROOM_NOT_FOUND', 'A sala não existe ou já foi removida.', requestId);
+        return;
+    }
+    if (room.owner_id !== socket.userId) {
+        sendError(socket, 'NOT_ROOM_OWNER', 'Somente o owner pode iniciar a partida.', requestId);
+        return;
+    }
+    if (room.status !== 'waiting') {
+        sendError(socket, 'ROOM_IN_PROGRESS', 'A partida desta sala já começou.', requestId);
+        return;
+    }
+
+    try {
+        const requiredQuestionCount =
+            room.floors * (room.mode === 'classic' ? room.notebooks_per_floor : 1);
+        const questionCount = database
+            .prepare('SELECT COUNT(*) AS count FROM questions')
+            .get().count;
+        if (questionCount < requiredQuestionCount) {
+            sendError(
+                socket,
+                'INSUFFICIENT_QUESTIONS',
+                'O catálogo não contém questões distintas suficientes para esta partida.',
+                requestId
+            );
+            return;
+        }
+
+        updateRoom(database, room.id, { status: 'playing' });
+        presence.rooms.get(room.id).revision += 1;
+        const snapshot = roomSnapshot(database, presence, room.id);
+        for (const participant of snapshot.participants) {
+            const connection = presence.connections.get(participant.user_id);
+            if (connection) {
+                send(
+                    connection,
+                    'match.started',
+                    { room_id: room.id },
+                    connection === socket ? requestId : undefined
+                );
+            }
+        }
+        broadcastRoomSnapshot(server, database, presence, room.id);
+    } catch (error) {
+        logger.error('Failed to start match:', error.message);
+        sendError(socket, 'INTERNAL_ERROR', 'Não foi possível iniciar a partida.', requestId, true);
+    }
+}
+
 export function attachRoomProtocol(server, { database, presence, logger = console }) {
     if (database) ensurePresenceRooms(database, presence);
     server.on('connection', socket =>
@@ -370,7 +498,9 @@ function attachSocketProtocol(socket, context) {
                 'rooms.list.request',
                 'room.create',
                 'room.join',
-                'room.leave'
+                'room.leave',
+                'room.configure',
+                'match.start'
             ].includes(message.type) &&
             !requestId
         ) {
@@ -401,6 +531,28 @@ function attachSocketProtocol(socket, context) {
                 break;
             case 'room.leave':
                 handleRoomLeave(
+                    socket,
+                    message.payload,
+                    requestId,
+                    server,
+                    database,
+                    presence,
+                    logger
+                );
+                break;
+            case 'room.configure':
+                handleRoomConfigure(
+                    socket,
+                    message.payload,
+                    requestId,
+                    server,
+                    database,
+                    presence,
+                    logger
+                );
+                break;
+            case 'match.start':
+                handleMatchStart(
                     socket,
                     message.payload,
                     requestId,

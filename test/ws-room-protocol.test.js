@@ -46,6 +46,29 @@ function sendRequest(client, message) {
     });
 }
 
+function waitForMessage(client, type) {
+    return new Promise(resolve => {
+        function onMessage(data) {
+            const message = JSON.parse(data.toString('utf8'));
+            if (message.type !== type) return;
+            client.off('message', onMessage);
+            resolve(message);
+        }
+
+        client.on('message', onMessage);
+    });
+}
+
+function insertQuestions(count) {
+    const insertQuestion = database.prepare(`
+        INSERT INTO questions (id, prompt, options, correct_option_index)
+        VALUES (?, ?, ?, ?)
+    `);
+    for (let id = 1; id <= count; id += 1) {
+        insertQuestion.run(id, `Question ${id}`, JSON.stringify(['A', 'B']), 0);
+    }
+}
+
 async function sendInvalidText(client, text) {
     const responsePromise = once(client, 'message');
     client.send(text);
@@ -382,5 +405,124 @@ describe('room creation and listing WebSocket events', () => {
             payload: { status: 'playing' }
         });
         assert.equal(invalidList.payload.code, 'INVALID_MESSAGE');
+    });
+
+    it('allows only the owner to update waiting-room settings', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-configurable-room',
+            payload: {
+                name: 'Before',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 2,
+                time_limit_seconds: null,
+                max_players: 3
+            }
+        });
+
+        const guest = await connectClient();
+        await hello(guest, '22222222-2222-4222-8222-222222222222');
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-configurable-room',
+            payload: { room_id: created.payload.room.room_id }
+        });
+
+        const denied = await sendRequest(guest, {
+            type: 'room.configure',
+            request_id: 'guest-configure',
+            payload: { name: 'Unauthorized' }
+        });
+        assert.equal(denied.payload.code, 'NOT_ROOM_OWNER');
+
+        const invalid = await sendRequest(owner, {
+            type: 'room.configure',
+            request_id: 'invalid-configure',
+            payload: { mode: 'deathmatch', notebooks_per_floor: 2 }
+        });
+        assert.equal(invalid.payload.code, 'INVALID_ROOM_SETTINGS');
+
+        const guestUpdate = waitForMessage(guest, 'room.snapshot');
+        const updated = await sendRequest(owner, {
+            type: 'room.configure',
+            request_id: 'owner-configure',
+            payload: { name: 'After', mode: 'deathmatch', notebooks_per_floor: 1 }
+        });
+        const guestSnapshot = await guestUpdate;
+
+        assert.equal(updated.type, 'room.snapshot');
+        assert.equal(updated.request_id, 'owner-configure');
+        assert.equal(updated.payload.revision, 3);
+        assert.equal(updated.payload.room.name, 'After');
+        assert.equal(updated.payload.room.mode, 'deathmatch');
+        assert.equal(updated.payload.room.notebooks_per_floor, 1);
+        assert.equal(guestSnapshot.payload.revision, 3);
+        assert.equal(database.prepare('SELECT mode FROM rooms').get().mode, 'deathmatch');
+    });
+
+    it('allows only the owner to start after the catalog meets room requirements', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-startable-room',
+            payload: {
+                name: 'Startable',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+
+        const guest = await connectClient();
+        await hello(guest, '22222222-2222-4222-8222-222222222222');
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-startable-room',
+            payload: { room_id: created.payload.room.room_id }
+        });
+
+        const denied = await sendRequest(guest, {
+            type: 'match.start',
+            request_id: 'guest-start',
+            payload: {}
+        });
+        assert.equal(denied.payload.code, 'NOT_ROOM_OWNER');
+
+        const insufficient = await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-without-questions',
+            payload: {}
+        });
+        assert.equal(insufficient.payload.code, 'INSUFFICIENT_QUESTIONS');
+        assert.equal(database.prepare('SELECT status FROM rooms').get().status, 'waiting');
+
+        insertQuestions(3);
+        const guestStarted = waitForMessage(guest, 'match.started');
+        const guestSnapshot = waitForMessage(guest, 'room.snapshot');
+        const started = await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'owner-start',
+            payload: {}
+        });
+
+        assert.equal(started.type, 'match.started');
+        assert.equal(started.request_id, 'owner-start');
+        assert.equal(started.payload.room_id, created.payload.room.room_id);
+        assert.equal((await guestStarted).type, 'match.started');
+        assert.equal((await guestSnapshot).payload.room.status, 'playing');
+        assert.equal(database.prepare('SELECT status FROM rooms').get().status, 'playing');
+
+        const repeatedStart = await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'repeat-start',
+            payload: {}
+        });
+        assert.equal(repeatedStart.payload.code, 'ROOM_IN_PROGRESS');
     });
 });
