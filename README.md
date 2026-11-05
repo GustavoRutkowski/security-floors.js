@@ -59,12 +59,19 @@ O servidor WebSocket e a interface do jogo ainda não foram implementados, entã
 
 O contrato planejado para mensagens WebSocket, sincronização de salas/partidas, consulta periódica da lista de salas, erros e transições de tela está em [`docs/WEBSOCKET.md`](docs/WEBSOCKET.md).
 
+## Desenvolvimento web e WebSocket
+
+O tooling usa Phaser, Vite e `ws`. `npm run dev` executa Vite e o processo WS em paralelo; `npm run dev:web` e `npm run dev:ws` iniciam cada processo separadamente. A interface Vite usa a pasta `web/`; host e porta de desenvolvimento são definidos por `VITE_HOST` e `VITE_PORT` (padrões `0.0.0.0` e `5173`). Preview usa `VITE_PREVIEW_HOST` e `VITE_PREVIEW_PORT` (padrões `0.0.0.0` e `4173`). O cliente lê `VITE_WS_URL`, e o servidor WS usa `WS_PORT` (padrão `3001`). `npm run build` gera a versão de produção em `dist/`, e `npm run preview` serve esse build localmente.
+
+Os comandos de desenvolvimento e build ficam preparados para as próximas etapas do MVP; a página web e o servidor WS serão implementados em MVP-06 e MVP-07.
+
 Antes de concluir alterações, rode as verificações pertinentes:
 
 ```sh
 npm test
 npm run lint
 npm run format:check
+npm run build
 ```
 
 Depois de editar arquivos suportados pelo Prettier, aplique a formatação com `npm run format` e rode novamente `npm run format:check`.

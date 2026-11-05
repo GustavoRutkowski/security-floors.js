@@ -11,6 +11,11 @@
     "type": "module",
     "scripts": {
         "db:init": "node --env-file-if-exists=.env --input-type=module -e \"import('./db/connection.js')\"",
+        "dev": "concurrently --kill-others-on-fail -n WEB,WS \"npm:dev:web\" \"npm:dev:ws\"",
+        "dev:web": "vite --config vite.config.js",
+        "dev:ws": "nodemon --watch ws --exec \"node --env-file-if-exists=.env ws/server.js\"",
+        "build": "vite build --config vite.config.js",
+        "preview": "vite preview --config vite.config.js",
         "test": "node --test",
         "lint": "eslint .",
         "format": "prettier --write \"**/*.{js,json,md,yaml,yml,html,css}\"",
@@ -23,7 +28,9 @@
         ]
     },
     "dependencies": {
-        "better-sqlite3": "^12.2.0"
+        "better-sqlite3": "^12.2.0",
+        "phaser": "^4.2.1",
+        "ws": "^8.22.1"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -34,6 +41,7 @@
         "husky": "^9.1.7",
         "lint-staged": "^16.4.0",
         "nodemon": "^3.1.14",
-        "prettier": "^3.8.1"
+        "prettier": "^3.8.1",
+        "vite": "^8.3.6"
     }
 }
