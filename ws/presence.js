@@ -67,6 +67,7 @@ export function createPresenceRoom(state, roomId, mode = 'classic') {
         roomId,
         mode,
         revision: 0,
+        match: null,
         playerIds: new Set(),
         spectatorIds: new Set()
     });

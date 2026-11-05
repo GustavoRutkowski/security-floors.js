@@ -498,13 +498,14 @@ describe('room creation and listing WebSocket events', () => {
                 max_players: 2
             }
         });
+        const roomId = created.payload.room.room_id;
 
         const guest = await connectClient();
         await hello(guest, '22222222-2222-4222-8222-222222222222');
         await sendRequest(guest, {
             type: 'room.join',
             request_id: 'join-startable-room',
-            payload: { room_id: created.payload.room.room_id }
+            payload: { room_id: roomId }
         });
 
         const denied = await sendRequest(guest, {
@@ -521,6 +522,7 @@ describe('room creation and listing WebSocket events', () => {
         });
         assert.equal(insufficient.payload.code, 'INSUFFICIENT_QUESTIONS');
         assert.equal(database.prepare('SELECT status FROM rooms').get().status, 'waiting');
+        assert.equal(server.presence.rooms.get(roomId).match, null);
 
         insertQuestions(3);
         const guestStarted = waitForMessage(guest, 'match.started');
@@ -537,6 +539,17 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal((await guestStarted).type, 'match.started');
         assert.equal((await guestSnapshot).payload.room.status, 'playing');
         assert.equal(database.prepare('SELECT status FROM rooms').get().status, 'playing');
+
+        const match = server.presence.rooms.get(roomId).match;
+        assert.equal(match.floors.length, 3);
+        assert.equal(match.questions.size, 3);
+        assert.equal(match.players.size, 2);
+        assert.equal(
+            new Set(
+                match.floors.flatMap(floor => floor.notebooks.map(notebook => notebook.questionId))
+            ).size,
+            3
+        );
 
         const repeatedStart = await sendRequest(owner, {
             type: 'match.start',

@@ -20,7 +20,7 @@
 - O ranking classico prioriza quem alcanca primeiro o andar final.
 - Questões sao de multipla escolha; verdadeiro/falso e representado por duas alternativas. A resposta correta e armazenada como indice baseado em zero.
 - Questões contem somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`; nao armazenam modo, andar ou caderno.
-- O servidor sorteia em tempo de jogo o andar e o caderno de cada questao. A numeracao e a ordem dos cadernos exibidas podem ser embaralhadas independentemente para cada jogador.
+- Ao iniciar uma partida, o servidor sorteia questoes distintas para cada slot de andar/caderno, sem persistir posicionamentos no catalogo. A numeracao e a ordem dos cadernos exibidas sao embaralhadas independentemente por jogador e por andar; a distribuicao e as respostas corretas permanecem somente na memoria do servidor.
 - O catalogo de questoes e compartilhado e reutilizavel nos modos classico e mata-mata.
 
 ## Casos de borda do MVP

@@ -37,7 +37,7 @@ O cliente envia intenções, nunca estado calculado: não envia posição absolu
 
 `room.configure` pode conter somente `name`, `mode`, `floors`, `notebooks_per_floor`, `time_limit_seconds` e `max_players`; campos omitidos permanecem inalterados. Somente o owner pode configurar uma sala `waiting`, e o novo limite de jogadores não pode ficar abaixo da quantidade atual de participantes. `time_limit_seconds: null` significa tempo ilimitado. `match.start` também é exclusivo do owner e só inicia uma sala `waiting`; antes disso, o servidor exige questões distintas suficientes para todos os espaços da partida conforme `RULES.md`. Todos entram na sala como jogadores; somente uma eliminação durante o mata-mata os converte em espectadores. Espectadores não podem movimentar personagens nem responder questões, e recebem somente os dados do jogador ativo que acompanham.
 
-Ao aceitar `match.start`, o servidor altera o status persistido para `playing`, envia `match.started` aos participantes conectados e publica o novo `room.snapshot`. A distribuição das questões e o estado inicial de gameplay são adicionados pelas etapas de implementação da partida.
+Ao aceitar `match.start`, o servidor sorteia questões distintas para todos os slots de andar/caderno e cria uma permutação de ordem e rótulos de caderno para cada participante. Essa distribuição, incluindo as respostas corretas, existe somente na memória do servidor e não é enviada no `room.snapshot` nem junto de `match.started`; a apresentação individual das perguntas ocorre no fluxo de gameplay.
 
 ## Servidor para cliente
 

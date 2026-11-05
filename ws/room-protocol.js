@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { createRoom, deleteRoom, listRooms, updateRoom } from '../db/rooms.js';
+import { createMatchDistribution } from './match-distribution.js';
 import {
     connectPlayer,
     createPresenceRoom,
@@ -591,23 +592,26 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
     }
 
     try {
-        const requiredQuestionCount =
-            room.floors * (room.mode === 'classic' ? room.notebooks_per_floor : 1);
-        const questionCount = database
-            .prepare('SELECT COUNT(*) AS count FROM questions')
-            .get().count;
-        if (questionCount < requiredQuestionCount) {
-            sendError(
-                socket,
-                'INSUFFICIENT_QUESTIONS',
-                'O catálogo não contém questões distintas suficientes para esta partida.',
-                requestId
-            );
-            return;
-        }
+        const questions = database
+            .prepare(
+                `SELECT id, prompt, options, correct_option_index, explanation
+                FROM questions ORDER BY id`
+            )
+            .all()
+            .map(question => ({ ...question, options: JSON.parse(question.options) }));
+        const matchDistribution = createMatchDistribution({
+            mode: room.mode,
+            floors: room.floors,
+            notebooksPerFloor: room.notebooks_per_floor,
+            questions,
+            playerIds: getRoomPresence(presence, room.id).players.map(player => player.userId)
+        });
 
         updateRoom(database, room.id, { status: 'playing' });
-        presence.rooms.get(room.id).revision += 1;
+        const roomPresence = presence.rooms.get(room.id);
+        roomPresence.match = matchDistribution;
+        roomPresence.revision += 1;
+
         const snapshot = roomSnapshot(database, presence, room.id);
         for (const participant of snapshot.participants) {
             const connection = presence.connections.get(participant.user_id);
@@ -622,6 +626,15 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
         }
         broadcastRoomSnapshot(server, database, presence, room.id);
     } catch (error) {
+        if (error.code === 'INSUFFICIENT_QUESTIONS') {
+            sendError(
+                socket,
+                'INSUFFICIENT_QUESTIONS',
+                'O catálogo não contém questões distintas suficientes para esta partida.',
+                requestId
+            );
+            return;
+        }
         logger.error('Failed to start match:', error.message);
         sendError(socket, 'INTERNAL_ERROR', 'Não foi possível iniciar a partida.', requestId, true);
     }

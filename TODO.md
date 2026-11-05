@@ -26,7 +26,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 
 ## Estado e regras da partida
 
-- [ ] **MVP-15** `feat: distribute questions randomly per match` — Criar a distribuição autoritativa de questões por andar/caderno a cada partida, sem gravar posicionamento no catálogo; embaralhar rótulos/ordem de cadernos por jogador e testar a distribuição com aleatoriedade injetável.
+- [x] **MVP-15** `feat: distribute questions randomly per match` — Criar a distribuição autoritativa de questões por andar/caderno a cada partida, sem gravar posicionamento no catálogo; embaralhar rótulos/ordem de cadernos por jogador e testar a distribuição com aleatoriedade injetável.
 - [ ] **MVP-16** `feat: synchronize authoritative player movement` — Implementar movimento em oito direções no servidor, limites do mapa e broadcast do estado validado aos participantes; ignorar comandos de espectadores.
 - [ ] **MVP-17** `feat: implement classic mode progression` — Avaliar respostas no servidor, avançar com acerto em qualquer caderno e aplicar espera de `S` segundos após errar todos os cadernos do andar.
 - [ ] **MVP-18** `feat: implement deathmatch elimination` — Usar um caderno por andar, eliminar imediatamente quem errar e encerrar quando as questões terminarem, restar um jogador ou vencer o último desconectado.
