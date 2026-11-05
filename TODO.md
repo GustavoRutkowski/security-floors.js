@@ -16,7 +16,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 
 ## Salas e presença
 
-- [ ] **MVP-08** `feat: add room persistence operations` — Implementar operações SQLite parametrizadas para criar, listar, atualizar e remover salas, validando limites de andares, cadernos, modo, tempo e jogadores.
+- [x] **MVP-08** `feat: add room persistence operations` — Implementar operações SQLite parametrizadas para criar, listar, atualizar e remover salas, validando limites de andares, cadernos, modo, tempo e jogadores.
 - [ ] **MVP-09** `feat: add authoritative room presence state` — Implementar estado em memória para conexões, jogadores, espectadores e ordem de entrada, sem persistir usuários ou presença.
 - [ ] **MVP-10** `feat: handle room creation and listing` — Implementar eventos WS para criar salas e listar/atualizar a lista, validando dados no servidor e retornando erros previsíveis.
 - [ ] **MVP-11** `feat: handle room joining and leaving` — Implementar entrada e saída de salas, rejeitar salas inexistentes/cheias/em partida quando aplicável e transmitir a lista atual de participantes.
