@@ -229,6 +229,11 @@ export function leaveRoomPresence(state, roomId, userId) {
     player.status = 'waiting';
     player.targetUserId = null;
 
+    const nextTarget = [...room.playerIds]
+        .map(id => state.players.get(id))
+        .find(candidate => candidate.status === 'active');
+    retargetSpectators(state, room, userId, nextTarget?.userId ?? null);
+
     return {
         player: toPlayerSnapshot(player),
         roomEmpty: room.playerIds.size === 0
@@ -258,8 +263,18 @@ export function setPlayerSpectating(state, roomId, userId, targetUserId) {
     player.status = 'spectating';
     player.targetUserId = target.userId;
     room.spectatorIds.add(userId);
+    retargetSpectators(state, room, userId, target.userId);
     room.revision += 1;
     return toPlayerSnapshot(player);
+}
+
+function retargetSpectators(state, room, previousTargetId, nextTargetId) {
+    for (const spectatorId of room.spectatorIds) {
+        const spectator = state.players.get(spectatorId);
+        if (spectator?.targetUserId === previousTargetId) {
+            spectator.targetUserId = nextTargetId;
+        }
+    }
 }
 
 export function setSpectatorTarget(state, roomId, userId, targetUserId) {
@@ -299,4 +314,27 @@ export function getRoomPresence(state, roomId) {
         players,
         spectators: players.filter(player => room.spectatorIds.has(player.userId))
     };
+}
+
+export function getPlayerViewers(state, roomId, targetUserId) {
+    const room = getRoom(state, roomId);
+    const target = getPlayer(state, targetUserId);
+    if (
+        target.roomId !== roomId ||
+        !room.playerIds.has(targetUserId) ||
+        target.status !== 'active'
+    ) {
+        throw new RangeError('Viewer target must be an active player in the room');
+    }
+
+    return [...room.playerIds]
+        .map(userId => state.players.get(userId))
+        .filter(
+            player =>
+                player &&
+                (player.userId === targetUserId ||
+                    (player.status === 'spectating' && player.targetUserId === targetUserId))
+        )
+        .sort((left, right) => left.entryOrder - right.entryOrder)
+        .map(toPlayerSnapshot);
 }

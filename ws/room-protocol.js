@@ -8,7 +8,9 @@ import {
     disconnectPlayer,
     getRoomPresence,
     joinRoomPresence,
-    leaveRoomPresence
+    leaveRoomPresence,
+    setPlayerSpectating,
+    setSpectatorTarget
 } from './presence.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -130,6 +132,13 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         if (!room) return;
 
         if (room.status === 'playing' && room.mode === 'deathmatch') {
+            eliminatePlayer({
+                database,
+                presence,
+                roomId,
+                userId: player.userId,
+                reason: 'reconnect_expired'
+            });
             transferRoomOwner(database, presence, room, player.userId, true);
             broadcastRoomSnapshot(server, database, presence, roomId);
             return;
@@ -139,6 +148,119 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         if (result && !result.roomEmpty) broadcastRoomSnapshot(server, database, presence, roomId);
     } catch (error) {
         logger.error('Failed to handle reconnect expiry:', error.message);
+    }
+}
+
+export function eliminatePlayer({ database, presence, roomId, userId, reason = 'wrong_answer' }) {
+    if (!['wrong_answer', 'reconnect_expired'].includes(reason)) {
+        throw new RangeError('Unsupported player elimination reason');
+    }
+
+    const room = database && listRooms(database).find(candidate => candidate.id === roomId);
+    const roomPresence = presence.rooms.get(roomId);
+    const player = presence.players.get(userId);
+    if (
+        !room ||
+        room.status !== 'playing' ||
+        room.mode !== 'deathmatch' ||
+        !roomPresence ||
+        !player ||
+        player.status !== 'active'
+    ) {
+        return null;
+    }
+
+    const previousTargets = new Map(
+        getRoomPresence(presence, roomId).spectators.map(spectator => [
+            spectator.userId,
+            spectator.targetUserId
+        ])
+    );
+    let eliminated;
+    try {
+        eliminated = setPlayerSpectating(presence, roomId, userId);
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('target must be an active player')) {
+            return null;
+        }
+        throw error;
+    }
+
+    for (const activePlayer of getRoomPresence(presence, roomId).players) {
+        if (activePlayer.status !== 'active') continue;
+        const connection = presence.connections.get(activePlayer.userId);
+        if (connection) {
+            send(connection, 'player.eliminated', { user_id: userId, reason });
+        }
+    }
+
+    const eliminatedConnection = presence.connections.get(userId);
+    if (eliminatedConnection) {
+        send(eliminatedConnection, 'spectator.started', {
+            user_id: userId,
+            target_user_id: eliminated.targetUserId
+        });
+    }
+
+    const updatedPresence = getRoomPresence(presence, roomId);
+    for (const spectator of updatedPresence.spectators) {
+        if (
+            spectator.userId !== userId &&
+            previousTargets.get(spectator.userId) !== spectator.targetUserId
+        ) {
+            const connection = presence.connections.get(spectator.userId);
+            if (connection) {
+                send(connection, 'spectator.following', {
+                    target_user_id: spectator.targetUserId
+                });
+            }
+        }
+    }
+
+    return { userId, targetUserId: eliminated.targetUserId };
+}
+
+function handleSpectatorFollow(socket, payload, requestId, presence) {
+    if (
+        !isRecord(payload) ||
+        !hasOnlyFields(payload, new Set(['target_user_id'])) ||
+        typeof payload.target_user_id !== 'string' ||
+        !UUID_PATTERN.test(payload.target_user_id)
+    ) {
+        sendError(socket, 'INVALID_MESSAGE', 'Alvo do espectador inválido.', requestId);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+    if (player.status !== 'spectating') {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'Somente espectadores podem trocar de alvo.',
+            requestId
+        );
+        return;
+    }
+
+    try {
+        const spectator = setSpectatorTarget(
+            presence,
+            player.roomId,
+            socket.userId,
+            payload.target_user_id
+        );
+        send(socket, 'spectator.following', { target_user_id: spectator.targetUserId }, requestId);
+    } catch {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'O alvo deve ser um jogador ativo desta sala.',
+            requestId
+        );
     }
 }
 
@@ -563,7 +685,8 @@ function attachSocketProtocol(socket, context) {
                 'room.join',
                 'room.leave',
                 'room.configure',
-                'match.start'
+                'match.start',
+                'spectator.follow'
             ].includes(message.type) &&
             !requestId
         ) {
@@ -624,6 +747,9 @@ function attachSocketProtocol(socket, context) {
                     presence,
                     logger
                 );
+                break;
+            case 'spectator.follow':
+                handleSpectatorFollow(socket, message.payload, requestId, presence);
                 break;
             default:
                 sendError(socket, 'INVALID_MESSAGE', 'Tipo de mensagem desconhecido.', requestId);

@@ -6,6 +6,7 @@ import {
     createPresenceState,
     deletePresenceRoom,
     disconnectPlayer,
+    getPlayerViewers,
     getRoomPresence,
     joinRoomPresence,
     leaveRoomPresence,
@@ -139,6 +140,34 @@ describe('authoritative room presence state', () => {
             () => setSpectatorTarget(state, 'room-1', 'player-3', 'player-3'),
             /active player/
         );
+    });
+
+    it('retargets spectators when their target is eliminated and filters player viewers', () => {
+        const state = createPresenceState();
+        createPresenceRoom(state, 'room-1', 'deathmatch');
+        for (const userId of ['player-1', 'player-2', 'player-3', 'player-4']) {
+            connect(state, userId);
+            joinRoomPresence(state, 'room-1', userId);
+        }
+
+        setPlayerSpectating(state, 'room-1', 'player-3', 'player-1');
+        setPlayerSpectating(state, 'room-1', 'player-4', 'player-1');
+        setPlayerSpectating(state, 'room-1', 'player-1', 'player-2');
+
+        const presence = getRoomPresence(state, 'room-1');
+        assert.deepEqual(
+            presence.spectators.map(player => [player.userId, player.targetUserId]),
+            [
+                ['player-1', 'player-2'],
+                ['player-3', 'player-2'],
+                ['player-4', 'player-2']
+            ]
+        );
+        assert.deepEqual(
+            getPlayerViewers(state, 'room-1', 'player-2').map(player => player.userId),
+            ['player-1', 'player-2', 'player-3', 'player-4']
+        );
+        assert.throws(() => getPlayerViewers(state, 'room-1', 'player-1'), /active player/);
     });
 
     it('does not allow spectators in classic rooms', () => {

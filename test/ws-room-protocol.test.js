@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { createRoom, updateRoom } from '../db/rooms.js';
-import { createPresenceState } from '../ws/presence.js';
+import { createPresenceState, getPlayerViewers } from '../ws/presence.js';
+import { eliminatePlayer } from '../ws/room-protocol.js';
 import { startWebSocketServer, closeWebSocketServer } from '../ws/server.js';
 
 const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
@@ -729,7 +730,96 @@ describe('room creation and listing WebSocket events', () => {
             snapshot.payload.participants.map(participant => participant.user_id),
             [playerId, guestId]
         );
-        assert.equal(server.presence.players.get(playerId).roomId, roomId);
+        const disconnectedOwner = server.presence.players.get(playerId);
+        assert.equal(disconnectedOwner.roomId, roomId);
+        assert.equal(disconnectedOwner.status, 'spectating');
+        assert.equal(disconnectedOwner.targetUserId, guestId);
         assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 1);
+    });
+
+    it('eliminates deathmatch players into spectators and restricts their field of view', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-spectators',
+            payload: {
+                name: 'Spectators',
+                mode: 'deathmatch',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 4
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const firstGuest = await connectClient();
+        const firstGuestId = '22222222-2222-4222-8222-222222222222';
+        await hello(firstGuest, firstGuestId);
+        await sendRequest(firstGuest, {
+            type: 'room.join',
+            request_id: 'join-first-spectator-room',
+            payload: { room_id: roomId }
+        });
+
+        const secondGuest = await connectClient();
+        const secondGuestId = '33333333-3333-4333-8333-333333333333';
+        await hello(secondGuest, secondGuestId);
+        await sendRequest(secondGuest, {
+            type: 'room.join',
+            request_id: 'join-second-spectator-room',
+            payload: { room_id: roomId }
+        });
+        updateRoom(database, roomId, { status: 'playing' });
+
+        const activeFollow = await sendRequest(owner, {
+            type: 'spectator.follow',
+            request_id: 'active-follow',
+            payload: { target_user_id: firstGuestId }
+        });
+        assert.equal(activeFollow.payload.code, 'ACTION_NOT_ALLOWED');
+
+        const eliminatedEvent = waitForMessage(owner, 'player.eliminated');
+        const spectatorStarted = waitForMessage(firstGuest, 'spectator.started');
+        const converted = eliminatePlayer({
+            database,
+            presence: server.presence,
+            roomId,
+            userId: firstGuestId
+        });
+        assert.deepEqual(converted, { userId: firstGuestId, targetUserId: playerId });
+        assert.equal((await eliminatedEvent).payload.user_id, firstGuestId);
+        assert.equal((await spectatorStarted).payload.target_user_id, playerId);
+
+        const follow = await sendRequest(firstGuest, {
+            type: 'spectator.follow',
+            request_id: 'spectator-follows-second-guest',
+            payload: { target_user_id: secondGuestId }
+        });
+        assert.equal(follow.type, 'spectator.following');
+        assert.equal(follow.request_id, 'spectator-follows-second-guest');
+        assert.equal(follow.payload.target_user_id, secondGuestId);
+
+        const invalidFollow = await sendRequest(firstGuest, {
+            type: 'spectator.follow',
+            request_id: 'spectator-follows-inactive-player',
+            payload: { target_user_id: firstGuestId }
+        });
+        assert.equal(invalidFollow.payload.code, 'ACTION_NOT_ALLOWED');
+
+        const retarget = waitForMessage(firstGuest, 'spectator.following');
+        const secondElimination = eliminatePlayer({
+            database,
+            presence: server.presence,
+            roomId,
+            userId: secondGuestId
+        });
+        assert.deepEqual(secondElimination, { userId: secondGuestId, targetUserId: playerId });
+        assert.equal((await retarget).payload.target_user_id, playerId);
+        assert.deepEqual(
+            getPlayerViewers(server.presence, roomId, playerId).map(player => player.userId),
+            [playerId, firstGuestId, secondGuestId]
+        );
     });
 });
