@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
+import { createPresenceState } from './presence.js';
 
 const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = 3001;
@@ -18,12 +19,18 @@ export function getWebSocketConfig(env = process.env) {
     return { host, port };
 }
 
-export function createWebSocketServer({ host, port, logger = console } = {}) {
+export function createWebSocketServer({
+    host,
+    port,
+    logger = console,
+    presence = createPresenceState()
+} = {}) {
     const defaults = getWebSocketConfig();
     const server = new WebSocketServer({
         host: host ?? defaults.host,
         port: port ?? defaults.port
     });
+    server.presence = presence;
 
     server.on('connection', socket => {
         logger.info('WebSocket client connected');

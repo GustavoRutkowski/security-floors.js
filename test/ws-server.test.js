@@ -33,6 +33,9 @@ describe('WebSocket server bootstrap', () => {
         server = await startWebSocketServer({ host: '127.0.0.1', port: 0, logger });
         const address = server.address();
         assert.ok(address && typeof address === 'object');
+        assert.ok(server.presence.rooms instanceof Map);
+        assert.ok(server.presence.players instanceof Map);
+        assert.ok(server.presence.connections instanceof Map);
 
         const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
         await once(client, 'open');

@@ -6,6 +6,8 @@ O protocolo de mensagens, payloads, erros e sincronização da sala está defini
 
 As operações persistentes parametrizadas estão em `db/rooms.js`: criação, listagem (com filtro opcional por estado), atualização parcial de configuração/owner/estado e remoção. A presença dos participantes não é persistida nessa camada.
 
+O estado online é mantido em memória por instância WS em `ws/presence.js`: conexões, participantes, espectadores eliminados, ordem de entrada e janela de reconexão. Ele não grava dados de usuário ou presença no SQLite.
+
 ## Criando uma sala
 
 Para criar uma sala o usuário deve:
