@@ -30,17 +30,17 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 
 ## Estrutura de Pastas:
 
-/ws → Lida com websockets e sincronização (é a camada central responsáel por sincronizar tudo para todos)
-/web → Lida com a exibição do game em si (frontend)
-/spritesheets → Folhas de sprites
-/db → Banco de Dados
+* /ws → Lida com websockets e sincronização (é a camada central responsáel por sincronizar tudo para todos)
+* /web → Lida com a exibição do game em si (frontend)
+* /web/spritesheets → Folhas de sprites
+* /db → Banco de Dados
 
 ## Stack:
 
-JS → Linguagem Principal (tanto do back quanto do frontend)
-Phaser → Renderização visual
-SQLite → Lida com o Armazenamento das Questões e das Salas (USUÁRIOS SÃO UUIDs gerados pelo cliente que transitam via WS, mas NÃO DEVEM ser armazenados no banco)
-ESLint / Prettier / Husky → Qualidade de código
+* JS → Linguagem Principal (tanto do back quanto do frontend)
+* Phaser → Renderização visual
+* SQLite → Lida com o Armazenamento das Questões e das Salas (USUÁRIOS SÃO UUIDs gerados pelo cliente que transitam via WS, mas NÃO DEVEM ser armazenados no banco)
+* ESLint / Prettier / Husky → Qualidade de código
 
 ## Setup e comandos
 
@@ -49,10 +49,11 @@ Requisitos: Node.js 20.19 ou superior e npm.
 ```sh
 npm install
 cp .env.example .env
+cp db/questions.example.json db/questions.json
 npm run db:init
 ```
 
-`db:init` cria o banco SQLite no caminho definido por `DB_PATH` e carrega o catálogo de questões do servidor em `db/questions.example.json`. A cada inicialização, esse catálogo substitui as questões existentes no banco; owners não definem questões. Cada questão contém somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`. O servidor sorteia em tempo de jogo o andar e o caderno em que cada questão aparece; a numeração e a ordem exibidas podem ser embaralhadas por jogador. O modo pertence à sala, e não à questão.
+`db/questions.example.json` é um modelo versionado. Copie-o para `db/questions.json` e mantenha nesse arquivo o catálogo real, que é ignorado pelo Git e carregado por `db:init` no banco SQLite definido por `DB_PATH`. Em cada inicialização, as questões são inseridas ou atualizadas por `id`, e registros ausentes do catálogo são removidos; owners não definem questões. Cada questão importa somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`. O servidor sorteia em tempo de jogo o andar e o caderno em que cada questão aparece; a numeração e a ordem exibidas podem ser embaralhadas por jogador. O modo pertence à sala, e não à questão.
 
 O servidor WebSocket e a interface do jogo ainda não foram implementados, então não há um comando para iniciar uma partida neste setup inicial.
 

@@ -17,7 +17,7 @@ Estas instrucoes complementam `AGENTS.md`. Leia `README.md`, `RULES.md` e os doc
 - Conexao: `db/connection.js`; `DB_PATH` pode ser fornecido pelo ambiente. Copie `.env.example` para `.env` e inicie Node com `--env-file=.env` se quiser carregar esse arquivo.
 - Salas usam os modos `classic` e `deathmatch`; tempo ilimitado e armazenado como `NULL`.
 - Questões sao de multipla escolha, alternativas em JSON e indice correto baseado em zero.
-- `db/questions.example.json` e o catalogo autoritativo de questoes do servidor. `db/connection.js` sempre o importa para substituir os registros no banco dentro de uma transacao; questoes nao sao configuradas por owner. Cada questao contem apenas `id`, `prompt`, `options`, `correct_option_index` e `explanation`. O servidor sorteia andar/caderno em tempo de jogo; a numeracao e a ordem exibidas podem variar por jogador. O modo pertence a sala.
+- `db/questions.example.json` e um modelo versionado; `db/questions.json`, ignorado pelo Git, e o catalogo efetivo. `db/connection.js` sincroniza esse catalogo no banco por UPSERT de ID dentro de uma transacao e remove registros ausentes; questoes nao sao configuradas por owner. Cada questao contem apenas `id`, `prompt`, `options`, `correct_option_index` e `explanation`. O servidor sorteia andar/caderno em tempo de jogo; a numeracao e a ordem exibidas podem variar por jogador. O modo pertence a sala.
 - IDs de usuario sao UUIDs efemeros do cliente; `owner_id` e dado sem chave estrangeira.
 
 ## Forma de colaborar

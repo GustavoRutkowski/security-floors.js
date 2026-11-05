@@ -16,12 +16,16 @@ export const db = new Database(databasePath);
 db.pragma('foreign_keys = ON');
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 
-const questions = JSON.parse(
-    readFileSync(new URL('./questions.json', import.meta.url), 'utf8')
-);
+const questions = JSON.parse(readFileSync(new URL('./questions.json', import.meta.url), 'utf8'));
 
-const replaceQuestions = db.transaction(questionList => {
-    db.exec('DELETE FROM questions');
+const syncQuestions = db.transaction(questionList => {
+    const questionIds = questionList.map(question => question.id);
+    if (questionIds.length === 0) {
+        db.exec('DELETE FROM questions');
+    } else {
+        const placeholders = questionIds.map(() => '?').join(', ');
+        db.prepare(`DELETE FROM questions WHERE id NOT IN (${placeholders})`).run(...questionIds);
+    }
 
     const insertQuestion = db.prepare(`
         INSERT INTO questions (
@@ -37,17 +41,24 @@ const replaceQuestions = db.transaction(questionList => {
             @correct_option_index,
             @explanation
         )
+        ON CONFLICT(id) DO UPDATE SET
+            prompt = excluded.prompt,
+            options = excluded.options,
+            correct_option_index = excluded.correct_option_index,
+            explanation = excluded.explanation
     `);
 
     for (const question of questionList) {
         insertQuestion.run({
-            ...question,
+            id: question.id,
+            prompt: question.prompt,
             options: JSON.stringify(question.options),
+            correct_option_index: question.correct_option_index,
             explanation: question.explanation ?? null
         });
     }
 });
 
-replaceQuestions(questions);
+syncQuestions(questions);
 
 export default db;

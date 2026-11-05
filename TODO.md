@@ -6,7 +6,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 
 ## Base e contratos
 
-- [ ] **MVP-01** `fix: use the example question catalog consistently` — Escolher `db/questions.json` como única fonte autoritativa, alinhar o caminho em `db/connection.js`, remover qualquer catálogo legado duplicado e confirmar que os cinco campos da questão são os únicos importados.
+- [x] **MVP-01** `fix: use the example question catalog consistently` — Manter `db/questions.example.json` como modelo e `db/questions.json` como catálogo efetivo, sincronizando-o por UPSERT e importando somente os cinco campos da questão.
 - [ ] **MVP-02** `test: add database bootstrap tests` — Adicionar testes com `node:test` para schema, formato exato das questões, validação de alternativas/índice correto e carga idempotente do catálogo; expor `npm test`.
 - [ ] **MVP-03** `docs: define the websocket message contract` — Documentar eventos cliente-servidor e servidor-cliente, payloads, erros e transições de tela; especificar que o servidor nunca envia `correct_option_index` antes de avaliar a resposta.
 - [ ] **MVP-04** `docs: settle MVP edge-case rules` — Registrar decisões para limite de espectadores, desconexão/reconexão, owner desconectado durante partida, empate no ranking, limite de tempo, catálogo insuficiente para preencher a partida e ordem de cadernos individual por jogador.

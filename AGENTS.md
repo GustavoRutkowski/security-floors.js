@@ -18,7 +18,7 @@ Este repositorio implementa um jogo web 2D de perguntas sobre seguranca da infor
 - Valide dados recebidos pelo WebSocket no servidor, inclusive identificadores, configuracoes de sala e respostas.
 - Mantenha nomes e valores persistidos compativeis com `RULES.md` e `db/schema.sql`.
 - Ao alterar schema, mantenha a inicializacao idempotente e atualize os documentos afetados.
-- Mantenha `db/questions.example.json` como fonte autoritativa das questoes do servidor; carregue o catalogo em toda inicializacao sem duplicar registros. Owners nao definem questoes.
+- Mantenha `db/questions.example.json` como modelo versionado e `db/questions.json` como catalogo efetivo ignorado pelo Git. `db/connection.js` carrega esse catalogo em toda inicializacao com UPSERT por ID e remove registros ausentes. Owners nao definem questoes.
 - Questões devem conter somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`; nao persistem modo, andar ou caderno.
 - O servidor decide aleatoriamente a distribuicao por andar/caderno em tempo de jogo e pode variar a numeracao/ordem exibida por jogador. O modo e propriedade da sala.
 - Mantenha o README atualizado com os passos para instalar e executar o setup e, quando existir, o jogo.
