@@ -30,17 +30,17 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 
 ## Estrutura de Pastas:
 
-* /ws → Lida com websockets e sincronização (é a camada central responsáel por sincronizar tudo para todos)
-* /web → Lida com a exibição do game em si (frontend)
-* /web/spritesheets → Folhas de sprites
-* /db → Banco de Dados
+- /ws → Lida com websockets e sincronização (é a camada central responsáel por sincronizar tudo para todos)
+- /web → Lida com a exibição do game em si (frontend)
+- /web/spritesheets → Folhas de sprites
+- /db → Banco de Dados
 
 ## Stack:
 
-* JS → Linguagem Principal (tanto do back quanto do frontend)
-* Phaser → Renderização visual
-* SQLite → Lida com o Armazenamento das Questões e das Salas (USUÁRIOS SÃO UUIDs gerados pelo cliente que transitam via WS, mas NÃO DEVEM ser armazenados no banco)
-* ESLint / Prettier / Husky → Qualidade de código
+- JS → Linguagem Principal (tanto do back quanto do frontend)
+- Phaser → Renderização visual
+- SQLite → Lida com o Armazenamento das Questões e das Salas (USUÁRIOS SÃO UUIDs gerados pelo cliente que transitam via WS, mas NÃO DEVEM ser armazenados no banco)
+- ESLint / Prettier / Husky → Qualidade de código
 
 ## Setup e comandos
 
@@ -60,6 +60,7 @@ O servidor WebSocket e a interface do jogo ainda não foram implementados, entã
 Antes de concluir alterações, rode as verificações pertinentes:
 
 ```sh
+npm test
 npm run lint
 npm run format:check
 ```

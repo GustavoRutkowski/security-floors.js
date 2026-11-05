@@ -11,6 +11,7 @@
     "type": "module",
     "scripts": {
         "db:init": "node --env-file-if-exists=.env --input-type=module -e \"import('./db/connection.js')\"",
+        "test": "node --test",
         "lint": "eslint .",
         "format": "prettier --write \"**/*.{js,json,md,yaml,yml,html,css}\"",
         "format:check": "prettier --check \"**/*.{js,json,md,yaml,yml,html,css}\""
