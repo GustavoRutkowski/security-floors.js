@@ -7,7 +7,8 @@ import {
     deletePresenceRoom,
     disconnectPlayer,
     getRoomPresence,
-    joinRoomPresence
+    joinRoomPresence,
+    leaveRoomPresence
 } from './presence.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -47,7 +48,7 @@ function roomSnapshot(database, presence, roomId) {
 
     const currentPresence = getRoomPresence(presence, roomId);
     return {
-        revision: 1,
+        revision: currentPresence.revision,
         room: {
             room_id: room.id,
             name: room.name,
@@ -63,9 +64,27 @@ function roomSnapshot(database, presence, roomId) {
             user_id: player.userId,
             nickname: player.nickname,
             character_id: player.characterId,
-            role: 'player'
+            role: 'player',
+            connected: player.connected
         }))
     };
+}
+
+function broadcastRoomSnapshot(server, database, presence, roomId, requester, requestId) {
+    const snapshot = roomSnapshot(database, presence, roomId);
+    if (!snapshot) return;
+
+    for (const participant of snapshot.participants) {
+        const connection = presence.connections.get(participant.user_id);
+        if (connection) {
+            send(
+                connection,
+                'room.snapshot',
+                snapshot,
+                connection === requester ? requestId : undefined
+            );
+        }
+    }
 }
 
 function ensurePresenceRooms(database, presence) {
@@ -74,7 +93,7 @@ function ensurePresenceRooms(database, presence) {
     }
 }
 
-function handleHello(socket, payload, requestId, database, presence, logger) {
+function handleHello(socket, payload, requestId, server, database, presence, logger) {
     if (
         !isRecord(payload) ||
         !hasOnlyFields(payload, SESSION_FIELDS) ||
@@ -115,9 +134,8 @@ function handleHello(socket, payload, requestId, database, presence, logger) {
 
         send(socket, 'session.ready', { protocol_version: 1, user_id: player.userId }, requestId);
 
-        if (resumed && player.roomId && database) {
-            const snapshot = roomSnapshot(database, presence, player.roomId);
-            if (snapshot) send(socket, 'room.snapshot', snapshot);
+        if ((resumed || replacedConnection) && player.roomId && database) {
+            broadcastRoomSnapshot(server, database, presence, player.roomId, socket);
         }
     } catch (error) {
         logger.error('Failed to establish WebSocket session:', error.message);
@@ -215,13 +233,105 @@ function handleRoomList(socket, payload, requestId, database, presence, logger) 
     }
 }
 
+function handleRoomJoin(socket, payload, requestId, server, database, presence, logger) {
+    if (
+        !isRecord(payload) ||
+        !hasOnlyFields(payload, new Set(['room_id'])) ||
+        typeof payload.room_id !== 'string' ||
+        !UUID_PATTERN.test(payload.room_id)
+    ) {
+        sendError(socket, 'INVALID_MESSAGE', 'Identificador de sala inválido.', requestId);
+        return;
+    }
+    if (!database) {
+        sendError(socket, 'INTERNAL_ERROR', 'Persistência de salas indisponível.', requestId, true);
+        return;
+    }
+
+    const room = listRooms(database).find(candidate => candidate.id === payload.room_id);
+    if (!room) {
+        sendError(socket, 'ROOM_NOT_FOUND', 'A sala não existe ou já foi removida.', requestId);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player) {
+        sendError(socket, 'SESSION_REQUIRED', 'Envie session.hello antes de entrar.', requestId);
+        return;
+    }
+    if (player.roomId === room.id) {
+        send(socket, 'room.snapshot', roomSnapshot(database, presence, room.id), requestId);
+        return;
+    }
+    if (player.roomId) {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'Saia da sala atual antes de entrar em outra.',
+            requestId
+        );
+        return;
+    }
+    if (room.status !== 'waiting') {
+        sendError(socket, 'ROOM_IN_PROGRESS', 'A partida desta sala já começou.', requestId);
+        return;
+    }
+
+    try {
+        if (!presence.rooms.has(room.id)) createPresenceRoom(presence, room.id, room.mode);
+        const roomPresence = presence.rooms.get(room.id);
+        if (roomPresence.playerIds.size >= room.max_players) {
+            sendError(socket, 'ROOM_FULL', 'A sala está cheia.', requestId);
+            return;
+        }
+
+        joinRoomPresence(presence, room.id, socket.userId);
+        broadcastRoomSnapshot(server, database, presence, room.id, socket, requestId);
+    } catch (error) {
+        logger.error('Failed to join room:', error.message);
+        sendError(socket, 'INTERNAL_ERROR', 'Não foi possível entrar na sala.', requestId, true);
+    }
+}
+
+function handleRoomLeave(socket, payload, requestId, server, database, presence, logger) {
+    if (!isRecord(payload) || Object.keys(payload).length !== 0) {
+        sendError(socket, 'INVALID_MESSAGE', 'room.leave não aceita parâmetros.', requestId);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+
+    const roomId = player.roomId;
+    try {
+        const result = leaveRoomPresence(presence, roomId, socket.userId);
+        if (!result) {
+            sendError(socket, 'NOT_IN_ROOM', 'Você não está nesta sala.', requestId);
+            return;
+        }
+
+        send(socket, 'room.left', { room_id: roomId }, requestId);
+        if (database && presence.rooms.has(roomId)) {
+            broadcastRoomSnapshot(server, database, presence, roomId);
+        }
+    } catch (error) {
+        logger.error('Failed to leave room:', error.message);
+        sendError(socket, 'INTERNAL_ERROR', 'Não foi possível sair da sala.', requestId, true);
+    }
+}
+
 export function attachRoomProtocol(server, { database, presence, logger = console }) {
     if (database) ensurePresenceRooms(database, presence);
-    server.on('connection', socket => attachSocketProtocol(socket, { database, presence, logger }));
+    server.on('connection', socket =>
+        attachSocketProtocol(socket, { server, database, presence, logger })
+    );
 }
 
 function attachSocketProtocol(socket, context) {
-    const { database, presence, logger } = context;
+    const { server, database, presence, logger } = context;
 
     socket.on('message', (data, isBinary) => {
         let message;
@@ -255,7 +365,13 @@ function attachSocketProtocol(socket, context) {
             return;
         }
         if (
-            ['session.hello', 'rooms.list.request', 'room.create'].includes(message.type) &&
+            [
+                'session.hello',
+                'rooms.list.request',
+                'room.create',
+                'room.join',
+                'room.leave'
+            ].includes(message.type) &&
             !requestId
         ) {
             sendError(socket, 'INVALID_MESSAGE', 'Esta mensagem exige request_id.');
@@ -264,7 +380,7 @@ function attachSocketProtocol(socket, context) {
 
         switch (message.type) {
             case 'session.hello':
-                handleHello(socket, message.payload, requestId, database, presence, logger);
+                handleHello(socket, message.payload, requestId, server, database, presence, logger);
                 break;
             case 'rooms.list.request':
                 handleRoomList(socket, message.payload, requestId, database, presence, logger);
@@ -272,12 +388,39 @@ function attachSocketProtocol(socket, context) {
             case 'room.create':
                 handleRoomCreate(socket, message.payload, requestId, database, presence, logger);
                 break;
+            case 'room.join':
+                handleRoomJoin(
+                    socket,
+                    message.payload,
+                    requestId,
+                    server,
+                    database,
+                    presence,
+                    logger
+                );
+                break;
+            case 'room.leave':
+                handleRoomLeave(
+                    socket,
+                    message.payload,
+                    requestId,
+                    server,
+                    database,
+                    presence,
+                    logger
+                );
+                break;
             default:
                 sendError(socket, 'INVALID_MESSAGE', 'Tipo de mensagem desconhecido.', requestId);
         }
     });
 
     socket.on('close', () => {
-        if (socket.userId) disconnectPlayer(presence, socket.userId, socket);
+        if (socket.userId) {
+            const roomId = presence.players.get(socket.userId)?.roomId;
+            if (disconnectPlayer(presence, socket.userId, socket) && roomId && database) {
+                broadcastRoomSnapshot(server, database, presence, roomId);
+            }
+        }
     });
 }

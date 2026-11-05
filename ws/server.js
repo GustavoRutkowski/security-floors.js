@@ -67,23 +67,35 @@ export function closeWebSocketServer(server) {
     if (server.address() === null) return Promise.resolve();
 
     return new Promise((resolveClose, rejectClose) => {
+        const clients = [...server.clients];
+        const clientsClosed = clients.map(client => {
+            if (client.readyState === WebSocket.CLOSED) return Promise.resolve();
+            return new Promise(resolveClientClosed => client.once('close', resolveClientClosed));
+        });
         const timeout = setTimeout(() => {
-            for (const client of server.clients) {
+            for (const client of clients) {
                 if (client.readyState !== WebSocket.CLOSED) client.terminate();
             }
         }, SHUTDOWN_TIMEOUT_MS);
         timeout.unref();
 
-        for (const client of server.clients) {
+        for (const client of clients) {
             if (client.readyState === WebSocket.OPEN) {
                 client.close(1001, 'Server shutting down');
             }
         }
 
         server.close(error => {
-            clearTimeout(timeout);
-            if (error) rejectClose(error);
-            else resolveClose();
+            if (error) {
+                clearTimeout(timeout);
+                rejectClose(error);
+                return;
+            }
+
+            Promise.all(clientsClosed).then(() => {
+                clearTimeout(timeout);
+                resolveClose();
+            }, rejectClose);
         });
     });
 }

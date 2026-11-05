@@ -66,6 +66,7 @@ export function createPresenceRoom(state, roomId, mode = 'classic') {
     state.rooms.set(roomId, {
         roomId,
         mode,
+        revision: 0,
         playerIds: new Set(),
         spectatorIds: new Set()
     });
@@ -113,6 +114,7 @@ export function connectPlayer(state, profile, connection, { now = Date.now() } =
 
     let player = state.players.get(profile.userId);
     const resumed = Boolean(player?.roomId && player.reconnectDeadline !== null);
+    const wasConnected = player?.connected ?? false;
     if (resumed && now > player.reconnectDeadline) {
         throw new RangeError('Player reconnection window has expired');
     }
@@ -144,6 +146,10 @@ export function connectPlayer(state, profile, connection, { now = Date.now() } =
     player.reconnectDeadline = null;
     player.reconnectExpired = false;
     state.connections.set(player.userId, connection);
+    if (resumed && !wasConnected) {
+        const room = state.rooms.get(player.roomId);
+        if (room) room.revision += 1;
+    }
 
     return {
         player: toPlayerSnapshot(player),
@@ -164,6 +170,10 @@ export function disconnectPlayer(state, userId, connection, { now = Date.now() }
     player.disconnectedAt = now;
     player.reconnectDeadline = now + state.reconnectGraceMs;
     player.reconnectExpired = false;
+    if (player.roomId) {
+        const room = state.rooms.get(player.roomId);
+        if (room) room.revision += 1;
+    }
 
     clearDisconnectTimer(state, player);
     const expectedDeadline = player.reconnectDeadline;
@@ -198,6 +208,7 @@ export function joinRoomPresence(state, roomId, userId) {
     player.status = 'active';
     player.targetUserId = null;
     room.playerIds.add(userId);
+    room.revision += 1;
 
     return toPlayerSnapshot(player);
 }
@@ -210,6 +221,7 @@ export function leaveRoomPresence(state, roomId, userId) {
     clearDisconnectTimer(state, player);
     room.playerIds.delete(userId);
     room.spectatorIds.delete(userId);
+    room.revision += 1;
     player.roomId = null;
     player.entryOrder = null;
     player.reconnectDeadline = null;
@@ -246,6 +258,7 @@ export function setPlayerSpectating(state, roomId, userId, targetUserId) {
     player.status = 'spectating';
     player.targetUserId = target.userId;
     room.spectatorIds.add(userId);
+    room.revision += 1;
     return toPlayerSnapshot(player);
 }
 
@@ -267,6 +280,7 @@ export function setSpectatorTarget(state, roomId, userId, targetUserId) {
     }
 
     player.targetUserId = targetUserId;
+    room.revision += 1;
     return toPlayerSnapshot(player);
 }
 
@@ -281,6 +295,7 @@ export function getRoomPresence(state, roomId) {
     return {
         roomId,
         mode: room.mode,
+        revision: room.revision,
         players,
         spectators: players.filter(player => room.spectatorIds.has(player.userId))
     };

@@ -22,7 +22,7 @@ Para criar uma sala o usuário deve:
 
 ## Entrando em uma sala
 
-Para entrar em uma sala, o usuário deve escolher uma das salas na tela inicial e então entrar como jogador (caso haja espaço sobrando). Não existe entrada externa como espectador; o modo espectador é reservado aos jogadores eliminados durante o mata-mata. Vagas desconectadas ficam reservadas por 30 segundos para reconexão.
+Para entrar em uma sala, o usuário deve escolher uma sala `waiting` e entrar como jogador (caso haja espaço sobrando). Salas `playing` e salas cheias são rejeitadas pelo servidor. A entrada/saída atualiza imediatamente o snapshot dos membros conectados; repetir a entrada na mesma sala não duplica o jogador. Não existe entrada externa como espectador; o modo espectador é reservado aos jogadores eliminados durante o mata-mata. Vagas desconectadas ficam reservadas por 30 segundos para reconexão.
 
 ## Life-Cycle de uma sala
 
@@ -32,6 +32,8 @@ O cilo de vida de uma sala consiste em:
 - Um UUID de owner é atribuído a sala
 - Se o owner sair, esse UUID é atribuído ao player mais antigo que estava na sala
 - Se não houverem mais players na sala, a sala deve ser deletada do banco.
+
+A transferência de owner e a exclusão persistente da sala vazia são implementadas na MVP-13.
 
 ## Quanto uma partida acaba
 

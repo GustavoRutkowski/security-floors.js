@@ -6,6 +6,7 @@ import { URL } from 'node:url';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
+import { createRoom, updateRoom } from '../db/rooms.js';
 import { startWebSocketServer, closeWebSocketServer } from '../ws/server.js';
 
 const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
@@ -72,10 +73,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+    const pendingClientCloses = [...clients]
+        .filter(client => client.readyState !== WebSocket.CLOSED)
+        .map(client => once(client, 'close'));
     if (server) {
         await closeWebSocketServer(server);
         server = null;
     }
+    await Promise.all(pendingClientCloses);
     clients.clear();
     database.close();
 });
@@ -150,7 +155,8 @@ describe('room creation and listing WebSocket events', () => {
                 user_id: playerId,
                 nickname: 'Player One',
                 character_id: 'avatar-1',
-                role: 'player'
+                role: 'player',
+                connected: true
             }
         ]);
         assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 1);
@@ -195,6 +201,168 @@ describe('room creation and listing WebSocket events', () => {
             player_count: 1,
             status: 'waiting'
         });
+    });
+
+    it('joins and leaves rooms while broadcasting updated participant snapshots', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-join',
+            payload: {
+                name: 'Shared room',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        await hello(guest, '22222222-2222-4222-8222-222222222222');
+        const ownerJoinBroadcast = once(owner, 'message').then(([data]) =>
+            JSON.parse(data.toString('utf8'))
+        );
+        const joined = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-room',
+            payload: { room_id: roomId }
+        });
+        const ownerJoinSnapshot = await ownerJoinBroadcast;
+
+        assert.equal(joined.type, 'room.snapshot');
+        assert.equal(joined.request_id, 'join-room');
+        assert.equal(joined.payload.revision, 2);
+        assert.equal(joined.payload.participants.length, 2);
+        assert.equal(ownerJoinSnapshot.type, 'room.snapshot');
+        assert.equal(ownerJoinSnapshot.payload.revision, 2);
+        assert.deepEqual(
+            ownerJoinSnapshot.payload.participants.map(participant => participant.user_id),
+            [playerId, '22222222-2222-4222-8222-222222222222']
+        );
+
+        const repeatedJoin = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-room-retry',
+            payload: { room_id: roomId }
+        });
+        assert.equal(repeatedJoin.type, 'room.snapshot');
+        assert.equal(repeatedJoin.payload.revision, 2);
+        assert.equal(repeatedJoin.payload.participants.length, 2);
+
+        const ownerLeaveBroadcast = once(owner, 'message').then(([data]) =>
+            JSON.parse(data.toString('utf8'))
+        );
+        const left = await sendRequest(guest, {
+            type: 'room.leave',
+            request_id: 'leave-room',
+            payload: {}
+        });
+        const ownerLeaveSnapshot = await ownerLeaveBroadcast;
+
+        assert.equal(left.type, 'room.left');
+        assert.equal(left.request_id, 'leave-room');
+        assert.equal(left.payload.room_id, roomId);
+        assert.equal(ownerLeaveSnapshot.type, 'room.snapshot');
+        assert.equal(ownerLeaveSnapshot.payload.revision, 3);
+        assert.deepEqual(
+            ownerLeaveSnapshot.payload.participants.map(participant => participant.user_id),
+            [playerId]
+        );
+
+        const repeatedLeave = await sendRequest(guest, {
+            type: 'room.leave',
+            request_id: 'leave-room-again',
+            payload: {}
+        });
+        assert.equal(repeatedLeave.payload.code, 'NOT_IN_ROOM');
+    });
+
+    it('rejects missing, full, in-progress, and conflicting room joins', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const firstRoom = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-full-room',
+            payload: {
+                name: 'Full room',
+                mode: 'classic',
+                floors: 5,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 1
+            }
+        });
+        const firstRoomId = firstRoom.payload.room.room_id;
+
+        const guest = await connectClient();
+        await hello(guest, '22222222-2222-4222-8222-222222222222');
+
+        const missing = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-missing-room',
+            payload: { room_id: '33333333-3333-4333-8333-333333333333' }
+        });
+        assert.equal(missing.payload.code, 'ROOM_NOT_FOUND');
+
+        const spectatorEntry = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-as-spectator',
+            payload: { room_id: firstRoomId, role: 'spectator' }
+        });
+        assert.equal(spectatorEntry.payload.code, 'INVALID_MESSAGE');
+
+        const full = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-full-room',
+            payload: { room_id: firstRoomId }
+        });
+        assert.equal(full.payload.code, 'ROOM_FULL');
+
+        updateRoom(database, firstRoomId, { status: 'playing' });
+        const inProgress = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-in-progress-room',
+            payload: { room_id: firstRoomId }
+        });
+        assert.equal(inProgress.payload.code, 'ROOM_IN_PROGRESS');
+
+        const availableRoom = createRoom(database, {
+            id: '44444444-4444-4444-8444-444444444444',
+            name: 'Other room',
+            owner_id: playerId,
+            mode: 'classic',
+            floors: 5,
+            notebooks_per_floor: 1,
+            time_limit_seconds: null,
+            max_players: 4
+        });
+        const joinedOtherRoom = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-other-room',
+            payload: { room_id: availableRoom.id }
+        });
+        assert.equal(joinedOtherRoom.type, 'room.snapshot');
+
+        const secondAvailableRoom = createRoom(database, {
+            id: '55555555-5555-4555-8555-555555555555',
+            name: 'Third room',
+            owner_id: playerId,
+            mode: 'classic',
+            floors: 5,
+            notebooks_per_floor: 1,
+            time_limit_seconds: null,
+            max_players: 4
+        });
+        const conflictingJoin = await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-second-room',
+            payload: { room_id: secondAvailableRoom.id }
+        });
+        assert.equal(conflictingJoin.type, 'error');
+        assert.equal(conflictingJoin.payload.code, 'ACTION_NOT_ALLOWED');
     });
 
     it('rejects unknown message types and extra list parameters', async () => {
