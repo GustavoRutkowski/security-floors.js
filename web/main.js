@@ -1,6 +1,7 @@
 import '@fontsource/press-start-2p';
 import './style.css';
 import { CHARACTERS, loadProfile, saveProfile } from './profile.js';
+import { WebSocketClient } from './websocket-client.js';
 
 const profileScreen = document.getElementById('profile-screen');
 const homeScreen = document.getElementById('home-screen');
@@ -8,6 +9,56 @@ const profileForm = document.getElementById('profile-form');
 const nicknameInput = document.getElementById('nickname');
 const profileError = document.getElementById('profile-error');
 const characterInputs = [...document.querySelectorAll('input[name="character_id"]')];
+let websocketClient;
+
+function getWebSocketUrl() {
+    if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.hostname}:3001`;
+}
+
+function updateConnectionStatus(status, message = null) {
+    const labels = {
+        disconnected: 'DESCONECTADO',
+        connecting: 'CONECTANDO',
+        open: 'AUTENTICANDO',
+        ready: 'ONLINE',
+        reconnecting: 'RECONEXÃO',
+        closed: 'DESCONECTADO'
+    };
+    document.getElementById('system-status').textContent = message || labels[status] || status;
+    document.getElementById('footer-state').textContent = `WS / ${labels[status] || status}`;
+}
+
+function connectWebSocket(profile) {
+    websocketClient?.close();
+    try {
+        websocketClient = new WebSocketClient({ url: getWebSocketUrl(), profile });
+    } catch (error) {
+        updateConnectionStatus('disconnected', 'WS INDISPONÍVEL');
+        profileError.textContent = error.message;
+        profileError.hidden = false;
+        return;
+    }
+
+    websocketClient.addEventListener('status', event => {
+        updateConnectionStatus(event.detail.status);
+    });
+    websocketClient.addEventListener('session.ready', () => {
+        websocketClient.listRooms().catch(() => {});
+    });
+    websocketClient.addEventListener('protocol-error', event => {
+        updateConnectionStatus(websocketClient.status, event.detail.message);
+    });
+    websocketClient.addEventListener('error', event => {
+        const detail = event.detail;
+        updateConnectionStatus(
+            websocketClient.status,
+            detail?.type === 'error' ? detail.payload.message : 'ERRO DE CONEXÃO'
+        );
+    });
+    websocketClient.connect();
+}
 
 function getCharacter(characterId) {
     return CHARACTERS.find(character => character.id === characterId) ?? CHARACTERS[0];
@@ -73,6 +124,7 @@ profileForm.addEventListener('submit', event => {
         });
         applyProfileToForm(profile);
         setScreen('home', profile);
+        connectWebSocket(profile);
         window.dispatchEvent(new CustomEvent('security-floors:profile-ready', { detail: profile }));
     } catch (error) {
         profileError.textContent =
@@ -95,5 +147,10 @@ for (const input of characterInputs) {
 }
 
 const storedProfile = loadProfile();
-if (storedProfile) applyProfileToForm(storedProfile);
-setScreen('profile');
+if (storedProfile) {
+    applyProfileToForm(storedProfile);
+    setScreen('home', storedProfile);
+    connectWebSocket(storedProfile);
+} else {
+    setScreen('profile');
+}

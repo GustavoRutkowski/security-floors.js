@@ -37,7 +37,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 ## Cliente e telas
 
 - [x] **MVP-22** `feat: add the player profile screen` — Criar escolha de nickname/personagem, gerar UUID no navegador e persistir esses dados localmente, nunca no banco.
-- [ ] **MVP-23** `feat: add the websocket client` — Implementar conexão, envio de intenções, validação básica dos eventos recebidos, estados de conexão e apresentação de erros/reconexão conforme `MVP-04`.
+- [x] **MVP-23** `feat: add the websocket client` — Implementar conexão, envio de intenções, validação básica dos eventos recebidos, estados de conexão e apresentação de erros/reconexão conforme `MVP-04`.
 - [ ] **MVP-24** `feat: add the room browser screen` — Exibir salas disponíveis, permitir atualizar a lista e entrar em uma sala; mostrar feedback para sala cheia ou indisponível.
 - [ ] **MVP-25** `feat: add the room lobby screen` — Exibir participantes e estado da sala, controles de owner, configuração da sala, saída e início da partida; suportar o fluxo de espectador.
 - [ ] **MVP-26** `feat: render the top-down game scene` — Criar o mapa e personagens provisórios pixelados, câmera e controles de movimento em oito direções, refletindo o estado recebido do servidor.
