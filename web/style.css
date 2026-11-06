@@ -1033,6 +1033,28 @@ h1 {
     flex: 0 0 auto;
 }
 
+.primary-button,
+.secondary-button {
+    min-height: 42px;
+    padding: 0 14px;
+    border: 1px solid var(--mint);
+    background: var(--mint);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 7px;
+}
+
+.primary-button:hover {
+    background: var(--paper);
+    border-color: var(--paper);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
 .room-refresh:disabled {
     cursor: wait;
     opacity: 0.55;
@@ -1109,6 +1131,264 @@ h1 {
 
 .room-card .secondary-button {
     min-width: 98px;
+}
+
+.lobby-main {
+    display: grid;
+    flex: 1;
+    place-items: center;
+    padding: 28px 0 22px;
+}
+
+.lobby-panel {
+    display: flex;
+    width: min(100%, 980px);
+    min-height: 520px;
+    flex-direction: column;
+    padding: 26px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+}
+
+.lobby-heading,
+.lobby-section-heading,
+.lobby-footer,
+.lobby-actions,
+.dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.lobby-heading {
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+}
+
+.lobby-heading h1,
+.room-dialog h2 {
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.lobby-layout {
+    display: grid;
+    grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.2fr);
+    gap: 14px;
+    padding: 22px 0;
+}
+
+.lobby-room-summary,
+.lobby-participants,
+.lobby-owner-controls {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--line);
+    background: var(--panel-raised);
+}
+
+.lobby-room-summary h2 {
+    margin: 0 0 20px;
+    overflow-wrap: anywhere;
+    color: var(--paper);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.8;
+}
+
+.room-summary-list {
+    display: grid;
+    gap: 14px;
+    margin: 0;
+}
+
+.room-summary-list div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 6px;
+    line-height: 1.8;
+}
+
+.room-summary-list dt {
+    color: var(--muted);
+}
+
+.room-summary-list dd {
+    margin: 0;
+    color: var(--cyan);
+    text-align: right;
+}
+
+.lobby-section-heading {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.lobby-section-heading .eyebrow,
+.lobby-section-heading > span {
+    margin: 0;
+    color: var(--cyan);
+    font-size: 7px;
+}
+
+.lobby-section-heading > span {
+    color: var(--muted);
+}
+
+.participant-list {
+    display: grid;
+    gap: 7px;
+    padding-top: 12px;
+}
+
+.participant-item {
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--line);
+    background: var(--ink);
+}
+
+.participant-item--owner {
+    border-left-color: var(--amber);
+}
+
+.participant-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--paper);
+    font-size: 7px;
+}
+
+.participant-badge {
+    flex: 0 0 auto;
+    color: var(--amber);
+    font-size: 6px;
+}
+
+.participant-connection {
+    color: var(--muted);
+    font-size: 6px;
+}
+
+.lobby-owner-controls {
+    margin-bottom: 18px;
+}
+
+.lobby-fields,
+.create-room-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px 0;
+}
+
+.lobby-fields label,
+.create-room-fields label {
+    display: grid;
+    gap: 8px;
+    color: var(--cyan);
+    font-size: 6px;
+}
+
+.lobby-fields input,
+.lobby-fields select,
+.create-room-fields input,
+.create-room-fields select {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 9px;
+    border: 1px solid var(--line);
+    outline: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font: inherit;
+    font-size: 7px;
+}
+
+.lobby-fields input:focus,
+.lobby-fields select:focus,
+.create-room-fields input:focus,
+.create-room-fields select:focus {
+    border-color: var(--mint);
+    box-shadow: inset 0 0 0 1px var(--mint);
+}
+
+.lobby-actions {
+    justify-content: flex-end;
+}
+
+.lobby-spectator-note {
+    margin: 0 0 16px;
+    padding: 12px;
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-size: 7px;
+    line-height: 1.8;
+}
+
+.lobby-footer {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+.room-dialog {
+    width: min(620px, calc(100% - 24px));
+    padding: 0;
+    border: 1px solid var(--cyan);
+    background: var(--panel);
+    color: var(--paper);
+}
+
+.room-dialog::backdrop {
+    background: rgb(16 25 28 / 82%);
+}
+
+.room-dialog form {
+    padding: 24px;
+}
+
+.room-dialog-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+}
+
+.room-dialog h2 {
+    margin: 0;
+    color: var(--paper);
+    font-weight: 400;
+}
+
+.dialog-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--coral);
+    cursor: pointer;
+    font: inherit;
+    font-size: 8px;
+}
+
+.dialog-close:hover {
+    border-color: var(--coral);
+    background: var(--coral);
+    color: var(--ink);
+}
+
+.dialog-actions {
+    justify-content: flex-end;
+    padding-top: 4px;
 }
 
 .home-footer {
@@ -1422,6 +1702,15 @@ h1 {
         width: 100%;
     }
 
+    .lobby-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .lobby-fields,
+    .create-room-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .home-footer {
         align-items: flex-start;
         flex-direction: column;
@@ -1431,6 +1720,32 @@ h1 {
 
     .secondary-button {
         width: 100%;
+    }
+
+    .primary-button {
+        width: 100%;
+    }
+
+    .lobby-panel,
+    .room-dialog form {
+        padding: 15px 12px;
+    }
+
+    .lobby-heading,
+    .lobby-footer,
+    .lobby-actions,
+    .dialog-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .lobby-heading .home-state {
+        align-self: flex-start;
+    }
+
+    .lobby-fields,
+    .create-room-fields {
+        grid-template-columns: 1fr;
     }
 
     .page-footer {

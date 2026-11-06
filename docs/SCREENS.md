@@ -13,6 +13,7 @@ Consiste em:
 
 - Uma lista com todas as rooms criadas
 - Um botão de "refresh" que busca as salas novamente ao ser clicado"
+- Um botão para criar uma nova room, com nome, modo, andares, cadernos, tempo e limite de jogadores
 - Buscar a lista ao abrir a tela e atualizá-la automaticamente a cada 15 segundos enquanto ela estiver visível; parar o polling ao sair da tela
 
 A consulta é feita pelo evento `rooms.list.request` do contrato em `WEBSOCKET.md`. A lista não é transmitida em tempo real; a entrada na sala sempre é revalidada pelo servidor.
@@ -22,7 +23,7 @@ No caso de a sala não estar disponível, ou cheia, um popup deve ser exibido.
 
 ## Sala Específica --> RoomScreen
 
-Nessa tela, os usuários aguardam até que o owner da partida autorize o início da partida. Os usuários podem sair da sala (redirecionados para `HomeScreen`), ou aguardar o owner autorizar a partida (e ser redirecionado para `GameScreen`).
+Nessa tela, os usuários aguardam até que o owner da partida autorize o início da partida. Os usuários podem sair da sala (redirecionados para `HomeScreen`), ou aguardar o owner autorizar a partida (e ser redirecionado para `GameScreen`). O owner pode editar a configuração da room e iniciar a partida; os demais participantes acompanham a configuração e a lista de jogadores em tempo real.
 
 O owner pode utilizar esta tela para editar informações/regras da sala (nome, max_players, time, etc...)
 

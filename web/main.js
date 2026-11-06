@@ -13,9 +13,15 @@ const refreshRoomsButton = document.getElementById('refresh-rooms');
 const roomList = document.getElementById('room-list');
 const roomsStatus = document.getElementById('rooms-status');
 const roomsError = document.getElementById('rooms-error');
+const lobbyScreen = document.getElementById('lobby-screen');
+const lobbyConfigForm = document.getElementById('lobby-config-form');
+const lobbyError = document.getElementById('lobby-error');
+const createRoomDialog = document.getElementById('create-room-dialog');
+const createRoomForm = document.getElementById('create-room-form');
 let websocketClient;
 let roomPollingTimer;
 let selectedRoomId;
+let currentRoomSnapshot;
 
 function getWebSocketUrl() {
     if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
@@ -133,6 +139,7 @@ function joinRoom(room, button) {
             selectedRoomId = snapshot.payload.room.room_id;
             roomsStatus.textContent = `SALA CONECTADA / ${snapshot.payload.room.name}`;
             renderRooms([room]);
+            showLobby(snapshot.payload);
             window.dispatchEvent(
                 new CustomEvent('security-floors:room-ready', { detail: snapshot.payload })
             );
@@ -157,6 +164,126 @@ function stopRoomPolling() {
     roomPollingTimer = undefined;
 }
 
+function showLobby(snapshot) {
+    currentRoomSnapshot = snapshot;
+    selectedRoomId = snapshot.room.room_id;
+    stopRoomPolling();
+    profileScreen.hidden = true;
+    homeScreen.hidden = true;
+    lobbyScreen.hidden = false;
+    document.documentElement.dataset.screen = 'lobby';
+    updateLobby(snapshot);
+}
+
+function showHome() {
+    currentRoomSnapshot = undefined;
+    selectedRoomId = undefined;
+    lobbyScreen.hidden = true;
+    setScreen('home', loadProfile());
+    if (websocketClient?.status === 'ready') {
+        refreshRooms();
+        startRoomPolling();
+    }
+}
+
+function roomTimeLabel(seconds) {
+    return seconds === null ? 'SEM LIMITE' : `${seconds} SEGUNDOS`;
+}
+
+function setLobbyError(message) {
+    lobbyError.textContent = message;
+    lobbyError.hidden = false;
+}
+
+function clearLobbyError() {
+    lobbyError.textContent = '';
+    lobbyError.hidden = true;
+}
+
+function setFormValue(id, value) {
+    document.getElementById(id).value = value;
+}
+
+function updateLobby(snapshot) {
+    const { room, participants } = snapshot;
+    const profile = loadProfile();
+    const isOwner = room.owner_id === profile?.user_id;
+    const isWaiting = room.status === 'waiting';
+    document.getElementById('lobby-title').textContent = isWaiting
+        ? 'AGUARDANDO JOGADORES'
+        : 'PARTIDA EM ANDAMENTO';
+    document.getElementById('lobby-status').lastChild.textContent = isWaiting
+        ? ' AGUARDANDO'
+        : ' EM JOGO';
+    document.getElementById('lobby-room-name').textContent = room.name;
+    document.getElementById('lobby-room-mode').textContent = formatRoomMode(room.mode);
+    document.getElementById('lobby-room-floors').textContent = String(room.floors).padStart(2, '0');
+    document.getElementById('lobby-room-notebooks').textContent = String(
+        room.notebooks_per_floor
+    ).padStart(2, '0');
+    document.getElementById('lobby-room-time').textContent = roomTimeLabel(room.time_limit_seconds);
+    document.getElementById('lobby-room-capacity').textContent =
+        `${String(participants.length).padStart(2, '0')} / ${String(room.max_players).padStart(2, '0')}`;
+    document.getElementById('participant-count').textContent = String(participants.length).padStart(
+        2,
+        '0'
+    );
+
+    const participantList = document.getElementById('participant-list');
+    participantList.replaceChildren();
+    for (const participant of participants) {
+        const item = document.createElement('div');
+        item.className = `participant-item${participant.user_id === room.owner_id ? ' participant-item--owner' : ''}`;
+        const name = document.createElement('span');
+        name.className = 'participant-name';
+        name.textContent = participant.nickname;
+        const state = document.createElement('span');
+        state.className =
+            participant.user_id === room.owner_id ? 'participant-badge' : 'participant-connection';
+        state.textContent =
+            participant.user_id === room.owner_id
+                ? 'OWNER'
+                : participant.connected
+                  ? 'ONLINE'
+                  : 'RECONEXÃO';
+        item.append(name, state);
+        participantList.append(item);
+    }
+
+    lobbyConfigForm.hidden = !isOwner || !isWaiting;
+    document.getElementById('start-match').disabled = !isOwner || !isWaiting;
+    if (isOwner && isWaiting && !lobbyConfigForm.matches(':focus-within')) {
+        setFormValue('lobby-name', room.name);
+        setFormValue('lobby-mode', room.mode);
+        setFormValue('lobby-floors', room.floors);
+        setFormValue('lobby-notebooks', room.notebooks_per_floor);
+        setFormValue('lobby-time', room.time_limit_seconds ?? '');
+        setFormValue('lobby-max-players', room.max_players);
+        syncDeathmatchNotebooks('lobby-mode', 'lobby-notebooks');
+    }
+}
+
+function getRoomSettings(form) {
+    const data = new FormData(form);
+    const timeLimit = data.get('time_limit_seconds');
+    return {
+        name: data.get('name').trim(),
+        mode: data.get('mode'),
+        floors: Number(data.get('floors')),
+        notebooks_per_floor: Number(data.get('notebooks_per_floor')),
+        time_limit_seconds: timeLimit === '' ? null : Number(timeLimit),
+        max_players: Number(data.get('max_players'))
+    };
+}
+
+function syncDeathmatchNotebooks(modeId, notebooksId) {
+    const mode = document.getElementById(modeId);
+    const notebooks = document.getElementById(notebooksId);
+    const deathmatch = mode.value === 'deathmatch';
+    notebooks.readOnly = deathmatch;
+    if (deathmatch) notebooks.value = '1';
+}
+
 function connectWebSocket(profile) {
     websocketClient?.close();
     try {
@@ -172,8 +299,33 @@ function connectWebSocket(profile) {
         updateConnectionStatus(event.detail.status);
     });
     websocketClient.addEventListener('session.ready', () => {
+        if (currentRoomSnapshot) return;
         refreshRooms();
         startRoomPolling();
+    });
+    websocketClient.addEventListener('room.snapshot', event => {
+        showLobby(event.detail.payload);
+    });
+    websocketClient.addEventListener('room.left', () => {
+        showHome();
+        document.getElementById('lobby-message').textContent = 'VOCÊ SAIU DA SALA';
+    });
+    websocketClient.addEventListener('match.started', () => {
+        document.getElementById('lobby-message').textContent = 'PARTIDA INICIADA';
+        window.dispatchEvent(new CustomEvent('security-floors:match-started'));
+    });
+    websocketClient.addEventListener('spectator.started', event => {
+        const target = event.detail.payload.target_user_id;
+        const note = document.getElementById('spectator-note');
+        note.textContent = target
+            ? `VOCÊ FOI ELIMINADO. ACOMPANHANDO ${target}.`
+            : 'VOCÊ FOI ELIMINADO. NÃO HÁ JOGADORES ATIVOS PARA ACOMPANHAR.';
+        note.hidden = false;
+    });
+    websocketClient.addEventListener('spectator.following', event => {
+        const note = document.getElementById('spectator-note');
+        note.textContent = `ACOMPANHANDO ${event.detail.payload.target_user_id}.`;
+        note.hidden = false;
     });
     websocketClient.addEventListener('protocol-error', event => {
         updateConnectionStatus(websocketClient.status, event.detail.message);
@@ -269,6 +421,84 @@ document.getElementById('edit-profile').addEventListener('click', () => {
     applyProfileToForm(loadProfile());
     setScreen('profile');
     nicknameInput.focus();
+});
+
+document.getElementById('open-create-room').addEventListener('click', () => {
+    clearRoomsError();
+    document.getElementById('create-room-error').hidden = true;
+    createRoomDialog.showModal();
+    document.getElementById('create-room-name').focus();
+});
+
+function closeCreateRoomDialog() {
+    createRoomDialog.close();
+}
+
+document.getElementById('close-create-room').addEventListener('click', closeCreateRoomDialog);
+document.getElementById('cancel-create-room').addEventListener('click', closeCreateRoomDialog);
+document.getElementById('create-room-mode').addEventListener('change', () => {
+    syncDeathmatchNotebooks('create-room-mode', 'create-room-notebooks');
+});
+document.getElementById('lobby-mode').addEventListener('change', () => {
+    syncDeathmatchNotebooks('lobby-mode', 'lobby-notebooks');
+});
+
+createRoomForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const errorElement = document.getElementById('create-room-error');
+    errorElement.hidden = true;
+    const submitButton = document.getElementById('submit-create-room');
+    submitButton.disabled = true;
+    try {
+        websocketClient
+            .createRoom(getRoomSettings(createRoomForm))
+            .then(snapshot => {
+                closeCreateRoomDialog();
+                showLobby(snapshot.payload);
+            })
+            .catch(error => {
+                errorElement.textContent = error.message || 'Não foi possível criar a sala.';
+                errorElement.hidden = false;
+            })
+            .finally(() => {
+                submitButton.disabled = false;
+            });
+    } catch (error) {
+        errorElement.textContent = error.message || 'Não foi possível criar a sala.';
+        errorElement.hidden = false;
+        submitButton.disabled = false;
+    }
+});
+
+lobbyConfigForm.addEventListener('submit', event => {
+    event.preventDefault();
+    clearLobbyError();
+    const saveButton = document.getElementById('save-lobby-config');
+    saveButton.disabled = true;
+    websocketClient
+        .configureRoom(getRoomSettings(lobbyConfigForm))
+        .then(snapshot => showLobby(snapshot.payload))
+        .catch(error => setLobbyError(error.message || 'Não foi possível atualizar a sala.'))
+        .finally(() => {
+            saveButton.disabled = false;
+        });
+});
+
+document.getElementById('start-match').addEventListener('click', event => {
+    clearLobbyError();
+    event.currentTarget.disabled = true;
+    websocketClient.startMatch().catch(error => {
+        setLobbyError(error.message || 'Não foi possível iniciar a partida.');
+        event.currentTarget.disabled = false;
+    });
+});
+
+document.getElementById('leave-room').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    websocketClient.leaveRoom().catch(error => {
+        setLobbyError(error.message || 'Não foi possível sair da sala.');
+        event.currentTarget.disabled = false;
+    });
 });
 
 for (const input of characterInputs) {

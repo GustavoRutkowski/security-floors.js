@@ -190,6 +190,9 @@
                             >
                                 ATUALIZAR
                             </button>
+                            <button id="open-create-room" class="primary-button" type="button">
+                                NOVA SALA
+                            </button>
                         </div>
                         <p id="rooms-status" class="rooms-status" role="status" aria-live="polite">
                             AGUARDANDO CONEXÃO
@@ -208,6 +211,226 @@
                     </div>
                 </section>
             </main>
+
+            <main id="lobby-screen" class="lobby-main" hidden>
+                <section class="lobby-panel" aria-labelledby="lobby-title">
+                    <div class="lobby-heading">
+                        <div>
+                            <p class="eyebrow">ROOM / SALA SELECIONADA</p>
+                            <h1 id="lobby-title">AGUARDANDO JOGADORES</h1>
+                        </div>
+                        <span id="lobby-status" class="home-state"
+                            ><i class="status-dot" aria-hidden="true"></i> AGUARDANDO</span
+                        >
+                    </div>
+
+                    <div class="lobby-layout">
+                        <section class="lobby-room-summary" aria-labelledby="lobby-room-name">
+                            <p class="eyebrow">CONFIGURAÇÃO ATUAL</p>
+                            <h2 id="lobby-room-name">SALA</h2>
+                            <dl class="room-summary-list">
+                                <div>
+                                    <dt>MODO</dt>
+                                    <dd id="lobby-room-mode">CLÁSSICO</dd>
+                                </div>
+                                <div>
+                                    <dt>ANDARES</dt>
+                                    <dd id="lobby-room-floors">05</dd>
+                                </div>
+                                <div>
+                                    <dt>CADERNOS / ANDAR</dt>
+                                    <dd id="lobby-room-notebooks">01</dd>
+                                </div>
+                                <div>
+                                    <dt>TEMPO</dt>
+                                    <dd id="lobby-room-time">SEM LIMITE</dd>
+                                </div>
+                                <div>
+                                    <dt>JOGADORES</dt>
+                                    <dd id="lobby-room-capacity">01 / 06</dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section class="lobby-participants" aria-labelledby="participants-title">
+                            <div class="lobby-section-heading">
+                                <p id="participants-title" class="eyebrow">PARTICIPANTES</p>
+                                <span id="participant-count">00</span>
+                            </div>
+                            <div id="participant-list" class="participant-list"></div>
+                        </section>
+                    </div>
+
+                    <form id="lobby-config-form" class="lobby-owner-controls" hidden>
+                        <div class="lobby-section-heading">
+                            <p class="eyebrow">CONTROLES DO OWNER</p>
+                            <span>EDITAR SALA</span>
+                        </div>
+                        <div class="lobby-fields">
+                            <label
+                                >SALA
+                                <input
+                                    id="lobby-name"
+                                    name="name"
+                                    type="text"
+                                    maxlength="64"
+                                    required
+                            /></label>
+                            <label
+                                >MODO
+                                <select id="lobby-mode" name="mode">
+                                    <option value="classic">CLÁSSICO</option>
+                                    <option value="deathmatch">MATA-MATA</option>
+                                </select></label
+                            >
+                            <label
+                                >ANDARES
+                                <input
+                                    id="lobby-floors"
+                                    name="floors"
+                                    type="number"
+                                    min="3"
+                                    max="30"
+                                    required
+                            /></label>
+                            <label
+                                >CADERNOS
+                                <input
+                                    id="lobby-notebooks"
+                                    name="notebooks_per_floor"
+                                    type="number"
+                                    min="1"
+                                    max="6"
+                                    required
+                            /></label>
+                            <label
+                                >TEMPO (SEGUNDOS)<input
+                                    id="lobby-time"
+                                    name="time_limit_seconds"
+                                    type="number"
+                                    min="60"
+                                    step="1"
+                                    placeholder="SEM LIMITE"
+                            /></label>
+                            <label
+                                >JOGADORES
+                                <input
+                                    id="lobby-max-players"
+                                    name="max_players"
+                                    type="number"
+                                    min="1"
+                                    required
+                            /></label>
+                        </div>
+                        <p id="lobby-error" class="form-message" role="alert" hidden></p>
+                        <div class="lobby-actions">
+                            <button id="save-lobby-config" class="secondary-button" type="submit">
+                                SALVAR CONFIGURAÇÃO
+                            </button>
+                            <button id="start-match" class="primary-button" type="button">
+                                INICIAR PARTIDA
+                            </button>
+                        </div>
+                    </form>
+
+                    <p id="spectator-note" class="lobby-spectator-note" hidden></p>
+                    <div class="lobby-footer">
+                        <p id="lobby-message" class="home-status">SALA PRONTA</p>
+                        <button id="leave-room" class="secondary-button" type="button">
+                            SAIR DA SALA
+                        </button>
+                    </div>
+                </section>
+            </main>
+
+            <dialog id="create-room-dialog" class="room-dialog">
+                <form id="create-room-form" method="dialog">
+                    <div class="room-dialog-heading">
+                        <div>
+                            <p class="eyebrow">ROOM / NOVA SALA</p>
+                            <h2>CONFIGURAR PARTIDA</h2>
+                        </div>
+                        <button
+                            id="close-create-room"
+                            class="dialog-close"
+                            type="button"
+                            aria-label="Fechar"
+                        >
+                            X
+                        </button>
+                    </div>
+                    <div class="create-room-fields">
+                        <label
+                            >SALA
+                            <input
+                                id="create-room-name"
+                                name="name"
+                                type="text"
+                                maxlength="64"
+                                placeholder="NOME DA SALA"
+                                required
+                        /></label>
+                        <label
+                            >MODO
+                            <select id="create-room-mode" name="mode">
+                                <option value="classic">CLÁSSICO</option>
+                                <option value="deathmatch">MATA-MATA</option>
+                            </select></label
+                        >
+                        <label
+                            >ANDARES
+                            <input
+                                id="create-room-floors"
+                                name="floors"
+                                type="number"
+                                min="3"
+                                max="30"
+                                value="5"
+                                required
+                        /></label>
+                        <label
+                            >CADERNOS
+                            <input
+                                id="create-room-notebooks"
+                                name="notebooks_per_floor"
+                                type="number"
+                                min="1"
+                                max="6"
+                                value="1"
+                                required
+                        /></label>
+                        <label
+                            >TEMPO (SEGUNDOS)<input
+                                id="create-room-time"
+                                name="time_limit_seconds"
+                                type="number"
+                                min="60"
+                                step="1"
+                                placeholder="SEM LIMITE"
+                        /></label>
+                        <label
+                            >JOGADORES
+                            <input
+                                id="create-room-max-players"
+                                name="max_players"
+                                type="number"
+                                min="1"
+                                max="32"
+                                value="6"
+                                required
+                        /></label>
+                    </div>
+                    <p id="create-room-error" class="form-message" role="alert" hidden></p>
+                    <div class="dialog-actions">
+                        <button class="secondary-button" type="button" id="cancel-create-room">
+                            CANCELAR
+                        </button>
+                        <button id="submit-create-room" class="primary-button" type="submit">
+                            CRIAR SALA
+                        </button>
+                    </div>
+                </form>
+            </dialog>
 
             <footer class="page-footer">
                 <span>SECURITY FLOORS <span class="footer-divider">/</span> PROTÓTIPO</span>

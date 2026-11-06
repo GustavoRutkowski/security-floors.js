@@ -173,11 +173,11 @@ export class WebSocketClient extends EventTarget {
     }
 
     configureRoom(settings) {
-        this.sendIntent('room.configure', settings);
+        return this.request('room.configure', settings);
     }
 
     startMatch() {
-        this.sendIntent('match.start', {});
+        return this.request('match.start');
     }
 
     move(sequence, direction) {

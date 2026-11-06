@@ -110,6 +110,37 @@ describe('browser WebSocket client', () => {
         });
     });
 
+    it('correlates owner configuration and match start requests', async () => {
+        const client = createClient();
+        client.connect();
+        const socket = FakeWebSocket.instances[0];
+        socket.open();
+        socket.receive({
+            type: 'session.ready',
+            payload: { protocol_version: 1, user_id: profile.user_id }
+        });
+
+        const configurePromise = client.configureRoom({ name: 'Updated room' });
+        const startPromise = client.startMatch();
+
+        assert.equal(socket.sent[1].type, 'room.configure');
+        assert.equal(typeof socket.sent[1].request_id, 'string');
+        assert.equal(socket.sent[2].type, 'match.start');
+        assert.equal(typeof socket.sent[2].request_id, 'string');
+        socket.receive({
+            type: 'room.snapshot',
+            request_id: socket.sent[1].request_id,
+            payload: { revision: 2, room: {}, participants: [] }
+        });
+        socket.receive({
+            type: 'match.started',
+            request_id: socket.sent[2].request_id,
+            payload: { room_id: 'room-id' }
+        });
+        await Promise.all([configurePromise, startPromise]);
+        client.close();
+    });
+
     it('rejects unsafe question events and schedules reconnect after close', () => {
         const client = createClient();
         const protocolErrors = [];
