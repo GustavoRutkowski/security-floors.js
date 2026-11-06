@@ -16,6 +16,7 @@
 
 - O servidor WebSocket valida acoes e e a autoridade para o estado compartilhado e o ranking.
 - No classico, o servidor apresenta ao jogador os cadernos do andar na ordem individual sorteada para ele. Uma resposta correta em qualquer caderno avanca imediatamente um andar. Cada caderno so pode ser respondido uma vez por andar; se todas as respostas estiverem erradas, o jogador aguarda 5 segundos e entao avanca automaticamente quando a porta abre.
+- No classico, a partida encerra assim que todos os jogadores concluem o ultimo andar ou quando o limite de tempo e atingido. `time_limit_seconds: null` significa que nao ha cronometro.
 - No mata-mata, cada andar tem exatamente um caderno. Errar elimina imediatamente o jogador e o converte em espectador. Acertar no ultimo andar encerra a partida com esse jogador como vencedor (`questions_exhausted`); eliminar um jogador e deixar exatamente um competidor ativo e conectado encerra com esse sobrevivente como vencedor (`last_player_standing`). Uma partida iniciada com um unico participante termina imediatamente com ele como vencedor. Se a expiracao de reconexao eliminar o ultimo competidor ativo, o jogador que acabou de expirar vence por ausencia de adversarios (`last_player_disconnected`). Se todos forem eliminados por resposta incorreta, a partida termina sem vencedor (`no_players_remaining`).
 - O ranking classico prioriza quem alcanca primeiro o andar final.
 - Questões sao de multipla escolha; verdadeiro/falso e representado por duas alternativas. A resposta correta e armazenada como indice baseado em zero.

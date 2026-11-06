@@ -115,11 +115,15 @@ export function createMatchDistribution({
                     floor: 1,
                     notebookIndex: 0,
                     status: 'playing',
+                    finishedAt: null,
                     doorOpensAt: null,
                     doorTimer: null
                 }
             ])
         ),
+        startedAt: null,
+        deadline: null,
+        timeoutTimer: null,
         ended: false,
         endReason: null,
         winnerUserId: null,

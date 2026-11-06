@@ -111,14 +111,24 @@ function transferRoomOwner(database, presence, room, departingUserId, connectedO
     return true;
 }
 
-function finishDeathmatch({ roomId, presence, winnerUserId = null, reason }) {
+function finishMatch({ roomId, presence, winnerUserId = null, reason }) {
     const roomPresence = presence.rooms.get(roomId);
     const match = roomPresence?.match;
-    if (!match || match.mode !== 'deathmatch' || match.ended) return false;
+    if (!match || match.ended) return false;
 
     match.ended = true;
     match.endReason = reason;
     match.winnerUserId = winnerUserId;
+    if (match.timeoutTimer !== null) {
+        presence.clearTimeoutFn(match.timeoutTimer);
+        match.timeoutTimer = null;
+    }
+    for (const progress of match.progress.values()) {
+        if (progress.doorTimer !== null) {
+            presence.clearTimeoutFn(progress.doorTimer);
+            progress.doorTimer = null;
+        }
+    }
     const winnerProgress = match.progress.get(winnerUserId);
     if (winnerProgress) winnerProgress.status = 'finished';
 
@@ -130,10 +140,24 @@ function finishDeathmatch({ roomId, presence, winnerUserId = null, reason }) {
     };
 
     addPlayer(winnerUserId);
-    for (const player of players) {
-        if (player.status === 'active') addPlayer(player.userId);
+    if (match.mode === 'deathmatch') {
+        for (const player of players) {
+            if (player.status === 'active') addPlayer(player.userId);
+        }
+        for (const userId of [...match.eliminationOrder].reverse()) addPlayer(userId);
+    } else {
+        const sortedPlayers = [...players].sort((left, right) => {
+            const leftProgress = match.progress.get(left.userId);
+            const rightProgress = match.progress.get(right.userId);
+            return (
+                rightProgress.floor - leftProgress.floor ||
+                (leftProgress.finishedAt ?? Number.POSITIVE_INFINITY) -
+                    (rightProgress.finishedAt ?? Number.POSITIVE_INFINITY) ||
+                left.entryOrder - right.entryOrder
+            );
+        });
+        for (const player of sortedPlayers) addPlayer(player.userId);
     }
-    for (const userId of [...match.eliminationOrder].reverse()) addPlayer(userId);
     for (const player of players) addPlayer(player.userId);
 
     const entries = orderedIds.map((userId, index) => {
@@ -160,6 +184,46 @@ function finishDeathmatch({ roomId, presence, winnerUserId = null, reason }) {
     return true;
 }
 
+function scheduleMatchTimeout(match, roomId, presence) {
+    if (match.deadline === null || match.ended) return;
+
+    const remainingMs = match.deadline - presence.nowFn();
+    match.timeoutTimer = presence.setTimeoutFn(
+        () => {
+            match.timeoutTimer = null;
+            if (presence.rooms.get(roomId)?.match !== match || match.ended) return;
+            if (presence.nowFn() < match.deadline) {
+                scheduleMatchTimeout(match, roomId, presence);
+                return;
+            }
+            finishMatch({ roomId, presence, reason: 'time_limit_reached' });
+        },
+        Math.max(0, remainingMs)
+    );
+    match.timeoutTimer.unref?.();
+}
+
+function expireMatchIfPastDeadline(match, roomId, presence) {
+    if (!match || match.ended) return true;
+    if (match.deadline === null || presence.nowFn() < match.deadline) return false;
+
+    finishMatch({ roomId, presence, reason: 'time_limit_reached' });
+    return true;
+}
+
+function finishClassicIfReady(match, roomId, presence) {
+    const roomPresence = presence.rooms.get(roomId);
+    if (
+        match.mode === 'classic' &&
+        roomPresence &&
+        [...roomPresence.playerIds].every(
+            userId => match.progress.get(userId)?.status === 'finished'
+        )
+    ) {
+        finishMatch({ roomId, presence, reason: 'all_players_finished' });
+    }
+}
+
 function removeRoomParticipant(database, presence, roomId, userId, connectedOnlyForHandoff) {
     const roomPresence = presence.rooms.get(roomId);
     if (!roomPresence || !roomPresence.playerIds.has(userId)) return null;
@@ -184,8 +248,12 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         const room = listRooms(database).find(candidate => candidate.id === roomId);
         if (!room) return;
 
+        const match = presence.rooms.get(roomId)?.match;
+        if (room.status === 'playing' && match && !match.ended) {
+            expireMatchIfPastDeadline(match, roomId, presence);
+        }
+
         if (room.status === 'playing' && room.mode === 'deathmatch') {
-            const match = presence.rooms.get(roomId)?.match;
             if (match && !match.ended && player.status === 'active') {
                 eliminatePlayer({
                     database,
@@ -198,14 +266,14 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
                     candidate => candidate.status === 'active'
                 );
                 if (activePlayers.length === 0) {
-                    finishDeathmatch({
+                    finishMatch({
                         roomId,
                         presence,
                         winnerUserId: player.userId,
                         reason: 'last_player_disconnected'
                     });
                 } else if (activePlayers.length === 1 && activePlayers[0].connected) {
-                    finishDeathmatch({
+                    finishMatch({
                         roomId,
                         presence,
                         winnerUserId: activePlayers[0].userId,
@@ -219,7 +287,10 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         }
 
         const result = removeRoomParticipant(database, presence, roomId, player.userId, true);
-        if (result && !result.roomEmpty) broadcastRoomSnapshot(server, database, presence, roomId);
+        if (result && !result.roomEmpty) {
+            if (match) finishClassicIfReady(match, roomId, presence);
+            broadcastRoomSnapshot(server, database, presence, roomId);
+        }
     } catch (error) {
         logger.error('Failed to handle reconnect expiry:', error.message);
     }
@@ -245,6 +316,7 @@ export function eliminatePlayer({ database, presence, roomId, userId, reason = '
     ) {
         return null;
     }
+    if (expireMatchIfPastDeadline(match, roomId, presence)) return null;
 
     const previousTargets = new Map(
         getRoomPresence(presence, roomId).spectators.map(spectator => [
@@ -316,6 +388,11 @@ function handleSpectatorFollow(socket, payload, requestId, presence) {
         sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
         return;
     }
+    const match = presence.rooms.get(player.roomId)?.match;
+    if (match && (expireMatchIfPastDeadline(match, player.roomId, presence) || match.ended)) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'A partida não está em andamento.', requestId);
+        return;
+    }
     if (player.status !== 'spectating') {
         sendError(
             socket,
@@ -373,6 +450,10 @@ function handlePlayerMove(socket, payload, requestId, presence) {
     const roomPresence = presence.rooms.get(player.roomId);
     const match = roomPresence?.match;
     const movement = match?.movement.get(socket.userId);
+    if (match && expireMatchIfPastDeadline(match, player.roomId, presence)) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'O tempo da partida terminou.', requestId);
+        return;
+    }
     if (!movement || match.ended) {
         sendError(socket, 'ACTION_NOT_ALLOWED', 'A partida não está em andamento.', requestId);
         return;
@@ -434,6 +515,8 @@ function sendCurrentQuestion(socket, match, userId, progress) {
 }
 
 function openNextClassicFloor({ match, progress, roomId, userId, presence }) {
+    if (expireMatchIfPastDeadline(match, roomId, presence)) return;
+
     const roomPresence = presence.rooms.get(roomId);
     if (
         roomPresence?.match !== match ||
@@ -450,6 +533,8 @@ function openNextClassicFloor({ match, progress, roomId, userId, presence }) {
     const player = presence.players.get(userId);
     if (progress.floor > match.players.get(userId).length) {
         progress.status = 'finished';
+        progress.finishedAt = presence.nowFn();
+        finishClassicIfReady(match, roomId, presence);
         return;
     }
 
@@ -493,6 +578,10 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
     const room = database && listRooms(database).find(candidate => candidate.id === player.roomId);
     const match = presence.rooms.get(player.roomId)?.match;
     const progress = match?.progress.get(socket.userId);
+    if (match && expireMatchIfPastDeadline(match, player.roomId, presence)) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'O tempo da partida terminou.', requestId);
+        return;
+    }
     if (
         room?.status !== 'playing' ||
         !['classic', 'deathmatch'].includes(room.mode) ||
@@ -552,8 +641,9 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
             progress.notebookIndex = 0;
             if (progress.floor > match.players.get(socket.userId).length) {
                 progress.status = 'finished';
+                progress.finishedAt = presence.nowFn();
                 send(socket, 'answer.result', result, requestId);
-                finishDeathmatch({
+                finishMatch({
                     roomId: player.roomId,
                     presence,
                     winnerUserId: socket.userId,
@@ -578,14 +668,14 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
             candidate => candidate.status === 'active'
         );
         if (activePlayers.length === 1 && activePlayers[0].connected) {
-            finishDeathmatch({
+            finishMatch({
                 roomId: player.roomId,
                 presence,
                 winnerUserId: activePlayers[0].userId,
                 reason: 'last_player_standing'
             });
         } else if (activePlayers.length === 0) {
-            finishDeathmatch({
+            finishMatch({
                 roomId: player.roomId,
                 presence,
                 reason: 'no_players_remaining'
@@ -599,6 +689,7 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
         progress.notebookIndex = 0;
         if (progress.floor > match.players.get(socket.userId).length) {
             progress.status = 'finished';
+            progress.finishedAt = presence.nowFn();
         } else {
             send(socket, 'answer.result', result, requestId);
             sendCurrentQuestion(socket, match, socket.userId, progress);
@@ -613,7 +704,7 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
         }
 
         progress.status = 'cooldown';
-        progress.doorOpensAt = Date.now() + CLASSIC_DOOR_WAIT_MS;
+        progress.doorOpensAt = presence.nowFn() + CLASSIC_DOOR_WAIT_MS;
         progress.doorTimer = presence.setTimeoutFn(
             () =>
                 openNextClassicFloor({
@@ -630,6 +721,7 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
     }
 
     send(socket, 'answer.result', result, requestId);
+    finishClassicIfReady(match, player.roomId, presence);
 }
 
 function ensurePresenceRooms(database, presence) {
@@ -680,15 +772,16 @@ function handleHello(socket, payload, requestId, server, database, presence, log
         send(socket, 'session.ready', { protocol_version: 1, user_id: player.userId }, requestId);
 
         if ((resumed || replacedConnection) && player.roomId && database) {
-            broadcastRoomSnapshot(server, database, presence, player.roomId, socket);
             const match = presence.rooms.get(player.roomId)?.match;
+            if (match) expireMatchIfPastDeadline(match, player.roomId, presence);
+            broadcastRoomSnapshot(server, database, presence, player.roomId, socket);
             const progress = match?.progress.get(player.userId);
             if (match?.mode === 'deathmatch' && !match.ended) {
                 const activePlayers = getRoomPresence(presence, player.roomId).players.filter(
                     participant => participant.status === 'active'
                 );
                 if (activePlayers.length === 1 && activePlayers[0].connected) {
-                    finishDeathmatch({
+                    finishMatch({
                         roomId: player.roomId,
                         presence,
                         winnerUserId: activePlayers[0].userId,
@@ -875,6 +968,8 @@ function handleRoomLeave(socket, payload, requestId, server, database, presence,
 
     const roomId = player.roomId;
     try {
+        const match = presence.rooms.get(roomId)?.match;
+        if (match) expireMatchIfPastDeadline(match, roomId, presence);
         const result = removeRoomParticipant(database, presence, roomId, socket.userId, false);
         if (!result) {
             sendError(socket, 'NOT_IN_ROOM', 'Você não está nesta sala.', requestId);
@@ -883,6 +978,7 @@ function handleRoomLeave(socket, payload, requestId, server, database, presence,
 
         send(socket, 'room.left', { room_id: roomId }, requestId);
         if (database && !result.roomEmpty) {
+            if (match) finishClassicIfReady(match, roomId, presence);
             broadcastRoomSnapshot(server, database, presence, roomId);
         }
     } catch (error) {
@@ -996,11 +1092,17 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
             questions,
             playerIds: getRoomPresence(presence, room.id).players.map(player => player.userId)
         });
+        matchDistribution.startedAt = presence.nowFn();
+        matchDistribution.deadline =
+            room.time_limit_seconds === null
+                ? null
+                : matchDistribution.startedAt + room.time_limit_seconds * 1000;
 
         updateRoom(database, room.id, { status: 'playing' });
         const roomPresence = presence.rooms.get(room.id);
         roomPresence.match = matchDistribution;
         roomPresence.revision += 1;
+        scheduleMatchTimeout(matchDistribution, room.id, presence);
 
         const snapshot = roomSnapshot(database, presence, room.id);
         for (const participant of snapshot.participants) {
@@ -1016,7 +1118,7 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
         }
         broadcastRoomSnapshot(server, database, presence, room.id);
         if (room.mode === 'deathmatch' && snapshot.participants.length === 1) {
-            finishDeathmatch({
+            finishMatch({
                 roomId: room.id,
                 presence,
                 winnerUserId: snapshot.participants[0].user_id,

@@ -91,6 +91,7 @@ describe('match question distribution', () => {
             floor: 1,
             notebookIndex: 0,
             status: 'playing',
+            finishedAt: null,
             doorOpensAt: null,
             doorTimer: null
         });

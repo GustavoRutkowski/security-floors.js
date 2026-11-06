@@ -38,11 +38,13 @@ export function createPresenceState({
     reconnectGraceMs = DEFAULT_RECONNECT_GRACE_MS,
     setTimeoutFn = setTimeout,
     clearTimeoutFn = clearTimeout,
+    nowFn = Date.now,
     onReconnectExpired = () => {}
 } = {}) {
     if (!Number.isSafeInteger(reconnectGraceMs) || reconnectGraceMs < 0) {
         throw new RangeError('reconnectGraceMs must be a non-negative integer');
     }
+    if (typeof nowFn !== 'function') throw new TypeError('nowFn must be a function');
 
     return {
         rooms: new Map(),
@@ -52,6 +54,7 @@ export function createPresenceState({
         reconnectGraceMs,
         setTimeoutFn,
         clearTimeoutFn,
+        nowFn,
         onReconnectExpired
     };
 }

@@ -18,6 +18,7 @@ const playerId = '11111111-1111-4111-8111-111111111111';
 let database;
 let server;
 let disconnectTimers;
+let now;
 const clients = new Set();
 
 async function connectClient() {
@@ -102,7 +103,9 @@ beforeEach(async () => {
     database = new Database(':memory:');
     database.exec(schema);
     disconnectTimers = [];
+    now = 1000;
     const presence = createPresenceState({
+        nowFn: () => now,
         setTimeoutFn(callback, delay) {
             const timer = { callback, delay, cleared: false, unref() {} };
             disconnectTimers.push(timer);
@@ -550,6 +553,8 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(match.floors.length, 3);
         assert.equal(match.questions.size, 3);
         assert.equal(match.players.size, 2);
+        assert.equal(match.deadline, null);
+        assert.equal(match.timeoutTimer, null);
         assert.equal(
             new Set(
                 match.floors.flatMap(floor => floor.notebooks.map(notebook => notebook.questionId))
@@ -563,6 +568,226 @@ describe('room creation and listing WebSocket events', () => {
             payload: {}
         });
         assert.equal(repeatedStart.payload.code, 'ROOM_IN_PROGRESS');
+    });
+
+    it('ends a timed match when its deadline timer fires', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-match-timeout',
+            payload: {
+                name: 'Timed match',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: 60,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-match-timeout',
+            payload: {}
+        });
+
+        const match = server.presence.rooms.get(roomId).match;
+        assert.equal(match.startedAt, now);
+        assert.equal(match.deadline, now + 60_000);
+        assert.equal(match.timeoutTimer.delay, 60_000);
+        const earlyTimer = match.timeoutTimer;
+        earlyTimer.callback();
+        assert.notEqual(match.timeoutTimer, earlyTimer);
+        assert.equal(match.timeoutTimer.delay, 60_000);
+        now = match.deadline;
+        match.timeoutTimer.callback();
+
+        const ended = await endedPromise;
+        assert.equal(ended.payload.reason, 'time_limit_reached');
+        assert.equal(match.ended, true);
+        assert.equal(match.timeoutTimer, null);
+    });
+
+    it('gives timeout priority over an answer processed at the exact deadline', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-answer-deadline',
+            payload: {
+                name: 'Answer deadline',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: 60,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+        const questionPromise = waitForMessage(owner, 'question.presented');
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-answer-deadline',
+            payload: {}
+        });
+        const question = (await questionPromise).payload;
+        const match = server.presence.rooms.get(roomId).match;
+        now = match.deadline;
+
+        const answer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'answer-at-deadline',
+            payload: { question_id: question.question_id, option_index: 0 }
+        });
+        const ended = await endedPromise;
+
+        assert.equal(answer.payload.code, 'ACTION_NOT_ALLOWED');
+        assert.equal(ended.payload.reason, 'time_limit_reached');
+        assert.equal(match.progress.get(playerId).floor, 1);
+    });
+
+    it('gives timeout priority over movement processed at the exact deadline', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-movement-deadline',
+            payload: {
+                name: 'Movement deadline',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: 60,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-movement-deadline',
+            payload: {}
+        });
+        const match = server.presence.rooms.get(roomId).match;
+        now = match.deadline;
+
+        const movement = await sendRequest(owner, {
+            type: 'player.move',
+            request_id: 'movement-at-deadline',
+            payload: { sequence: 0, direction: 'east' }
+        });
+        const ended = await endedPromise;
+
+        assert.equal(movement.payload.code, 'ACTION_NOT_ALLOWED');
+        assert.equal(ended.payload.reason, 'time_limit_reached');
+        assert.deepEqual(match.movement.get(playerId), {
+            x: 50,
+            y: 50,
+            direction: 'stop',
+            sequence: -1
+        });
+    });
+
+    it('accepts a final answer before the deadline and ignores the later timeout callback', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-final-answer-race',
+            payload: {
+                name: 'Final answer race',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: 60,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+        const questionPromise = waitForMessage(owner, 'question.presented');
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-final-answer-race',
+            payload: {}
+        });
+        const match = server.presence.rooms.get(roomId).match;
+        const timeoutTimer = match.timeoutTimer;
+        let question = (await questionPromise).payload;
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            if (floor === 3) now = match.deadline - 1;
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(owner, 'question.presented') : null;
+            const answer = await sendRequest(owner, {
+                type: 'question.answer',
+                request_id: `final-answer-race-${floor}`,
+                payload: { question_id: question.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+        }
+
+        const ended = await endedPromise;
+        assert.equal(ended.payload.reason, 'all_players_finished');
+        assert.equal(match.timeoutTimer, null);
+        timeoutTimer.callback();
+        assert.equal(match.endReason, 'all_players_finished');
+    });
+
+    it('ends an unlimited classic match when all floors are completed', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-classic-completion',
+            payload: {
+                name: 'Unlimited classic',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+        const questionPromise = waitForMessage(owner, 'question.presented');
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-classic-completion',
+            payload: {}
+        });
+        let question = (await questionPromise).payload;
+        const match = server.presence.rooms.get(roomId).match;
+        assert.equal(match.deadline, null);
+        assert.equal(match.timeoutTimer, null);
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(owner, 'question.presented') : null;
+            const answer = await sendRequest(owner, {
+                type: 'question.answer',
+                request_id: `classic-completion-${floor}`,
+                payload: { question_id: question.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+        }
+
+        const ended = await endedPromise;
+        assert.equal(ended.payload.reason, 'all_players_finished');
+        assert.equal(ended.payload.entries[0].status, 'finished');
+        assert.equal(match.ended, true);
+        assert.equal(match.timeoutTimer, null);
     });
 
     it('synchronizes authoritative movement and rejects stale or malformed input', async () => {
