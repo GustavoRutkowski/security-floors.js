@@ -366,8 +366,11 @@ function connectWebSocket(profile) {
         );
         const updatedPlayer = {
             user_id: movement.user_id,
+            nickname: movement.nickname ?? player?.nickname,
+            character_id: movement.character_id ?? player?.character_id,
             x: movement.x,
             y: movement.y,
+            direction: movement.direction,
             floor: player?.floor ?? 1,
             status: player?.status ?? 'playing'
         };

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 const WORLD_SIZE = 800;
 const LOGICAL_MAP_SIZE = 100;
-const MOVE_INTERVAL_MS = 110;
+const MOVE_INTERVAL_MS = 85;
 const CHARACTER_IDS = ['bobabao', 'lixaredo', 'tubarina'];
 
 function logicalToWorld(value) {
@@ -11,11 +11,11 @@ function logicalToWorld(value) {
 
 function getDirection(cursors, keys) {
     const horizontal =
-        (cursors.left.isDown || keys.a.isDown ? -1 : 0) +
-        (cursors.right.isDown || keys.d.isDown ? 1 : 0);
+        (cursors?.left?.isDown || keys?.a?.isDown ? -1 : 0) +
+        (cursors?.right?.isDown || keys?.d?.isDown ? 1 : 0);
     const vertical =
-        (cursors.up.isDown || keys.w.isDown ? -1 : 0) +
-        (cursors.down.isDown || keys.s.isDown ? 1 : 0);
+        (cursors?.up?.isDown || keys?.w?.isDown ? -1 : 0) +
+        (cursors?.down?.isDown || keys?.s?.isDown ? 1 : 0);
     if (horizontal === 0 && vertical === 0) return 'stop';
     if (vertical < 0 && horizontal < 0) return 'northwest';
     if (vertical < 0 && horizontal > 0) return 'northeast';
@@ -27,7 +27,7 @@ function getDirection(cursors, keys) {
 }
 
 class TopDownScene extends Phaser.Scene {
-    constructor() {
+    constructor(onHudUpdate) {
         super('top-down-scene');
         this.players = new Map();
         this.latestSnapshot = null;
@@ -37,6 +37,9 @@ class TopDownScene extends Phaser.Scene {
         this.lastDirection = 'stop';
         this.lastMoveAt = 0;
         this.controlsEnabled = true;
+        this.ready = false;
+        this.pendingMovements = new Map();
+        this.onHudUpdate = onHudUpdate;
     }
 
     init(data) {
@@ -56,10 +59,17 @@ class TopDownScene extends Phaser.Scene {
 
     create() {
         this.createMap();
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.keys = this.input.keyboard.addKeys('W,A,S,D');
         this.createAnimations();
+        if (this.input.keyboard) {
+            this.cursors = this.input.keyboard.createCursorKeys();
+            this.keys = this.input.keyboard.addKeys('W,A,S,D');
+        } else {
+            this.controlsEnabled = false;
+        }
+        this.ready = true;
         this.applySnapshot(this.latestSnapshot);
+        for (const movement of this.pendingMovements.values()) this.updatePlayer(movement);
+        this.pendingMovements.clear();
         this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
         this.cameras.main.setZoom(
             Math.min(this.scale.width / WORLD_SIZE, this.scale.height / WORLD_SIZE)
@@ -89,18 +99,22 @@ class TopDownScene extends Phaser.Scene {
 
     createAnimations() {
         for (const characterId of CHARACTER_IDS) {
-            this.anims.create({
-                key: `${characterId}-walk`,
-                frames: this.anims.generateFrameNumbers(characterId, { start: 0, end: 2 }),
-                frameRate: 6,
-                repeat: -1
-            });
+            const animationKey = `${characterId}-walk`;
+            if (!this.anims.exists(animationKey)) {
+                this.anims.create({
+                    key: animationKey,
+                    frames: this.anims.generateFrameNumbers(characterId, { start: 0, end: 2 }),
+                    frameRate: 6,
+                    repeat: -1
+                });
+            }
         }
     }
 
     applySnapshot(snapshot) {
         if (!snapshot?.players) return;
         this.latestSnapshot = snapshot;
+        if (!this.ready) return;
         const visibleIds = new Set(snapshot.players.map(player => player.user_id));
         for (const [userId, view] of this.players) {
             if (!visibleIds.has(userId)) {
@@ -114,10 +128,17 @@ class TopDownScene extends Phaser.Scene {
     }
 
     updatePlayer(player) {
+        if (!this.ready) {
+            this.pendingMovements.set(player.user_id, player);
+            return;
+        }
         const isLocal = player.user_id === this.profile.user_id;
-        const characterId = isLocal
-            ? this.profile.character_id
-            : CHARACTER_IDS[player.user_id.charCodeAt(0) % CHARACTER_IDS.length];
+        const characterId = CHARACTER_IDS.includes(player.character_id)
+            ? player.character_id
+            : isLocal
+              ? this.profile.character_id
+              : CHARACTER_IDS[0];
+        const nickname = player.nickname || (isLocal ? this.profile.nickname : player.user_id);
         let view = this.players.get(player.user_id);
         if (!view) {
             const sprite = this.add.sprite(
@@ -129,27 +150,39 @@ class TopDownScene extends Phaser.Scene {
             sprite.setScale(2.5);
             sprite.setDepth(isLocal ? 3 : 2);
             const label = this.add
-                .text(
-                    sprite.x,
-                    sprite.y - 28,
-                    isLocal ? this.profile.nickname : player.user_id.slice(0, 4),
-                    {
-                        color: isLocal ? '#a8d86e' : '#dce6d5',
-                        fontFamily: 'Press Start 2P',
-                        fontSize: '8px'
-                    }
-                )
-                .setOrigin(0.5);
+                .text(sprite.x, sprite.y - 28, nickname, {
+                    backgroundColor: isLocal ? '#29452f' : '#172226',
+                    color: isLocal ? '#c8f58f' : '#dce6d5',
+                    fontFamily: 'Press Start 2P',
+                    fontSize: '8px'
+                })
+                .setOrigin(0.5)
+                .setPadding(4, 2, 4, 2);
             view = { sprite, label, characterId };
             this.players.set(player.user_id, view);
             if (isLocal) this.cameras.main.startFollow(sprite, true, 0.08, 0.08);
         }
+        if (view.characterId !== characterId) {
+            view.sprite.setTexture(characterId, 0);
+            view.characterId = characterId;
+        }
+        view.label.setText(nickname);
         view.sprite.setPosition(logicalToWorld(player.x), logicalToWorld(player.y));
         view.label.setPosition(view.sprite.x, view.sprite.y - 28);
+        view.sprite.setFlipX(
+            player.direction === 'west' ||
+                player.direction === 'northwest' ||
+                player.direction === 'southwest'
+        );
         view.sprite.setAlpha(player.status === 'eliminated' ? 0.45 : 1);
+        const animationKey = `${view.characterId}-walk`;
         if (player.status === 'eliminated') view.sprite.stop();
-        else view.sprite.play(`${view.characterId}-walk`, true);
+        else if (this.anims.exists(animationKey)) view.sprite.play(animationKey, true);
         if (isLocal) this.controlsEnabled = player.status !== 'eliminated';
+    }
+
+    updateMovement(movement) {
+        this.updatePlayer(movement);
     }
 
     updateHud(snapshot) {
@@ -157,7 +190,7 @@ class TopDownScene extends Phaser.Scene {
             player => player.user_id === this.profile.user_id
         );
         if (!localPlayer) return;
-        this.events.emit('hud-update', {
+        this.onHudUpdate?.({
             floor: localPlayer.floor,
             status: localPlayer.status === 'eliminated' ? 'SPECTATOR' : 'PLAYING'
         });
@@ -191,10 +224,10 @@ class TopDownScene extends Phaser.Scene {
 }
 
 export function createTopDownGame({ root, client, profile, snapshot, onHudUpdate }) {
-    const scene = new TopDownScene();
-    scene.events.on('hud-update', onHudUpdate);
+    const scene = new TopDownScene(onHudUpdate);
+    root.replaceChildren();
     const game = new Phaser.Game({
-        type: Phaser.AUTO,
+        type: Phaser.CANVAS,
         parent: root,
         width: root.clientWidth || 800,
         height: root.clientHeight || 520,
@@ -203,6 +236,9 @@ export function createTopDownGame({ root, client, profile, snapshot, onHudUpdate
         scale: {
             mode: Phaser.Scale.RESIZE,
             autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        input: {
+            keyboard: true
         },
         scene
     });

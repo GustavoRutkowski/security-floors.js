@@ -99,6 +99,17 @@ async function hello(client, id = playerId) {
     });
 }
 
+async function joinGuest(roomId, requestId) {
+    const guest = await connectClient();
+    await hello(guest, '22222222-2222-4222-8222-222222222222');
+    await sendRequest(guest, {
+        type: 'room.join',
+        request_id: requestId,
+        payload: { room_id: roomId }
+    });
+    return guest;
+}
+
 beforeEach(async () => {
     database = new Database(':memory:');
     database.exec(schema);
@@ -509,6 +520,14 @@ describe('room creation and listing WebSocket events', () => {
         });
         const roomId = created.payload.room.room_id;
 
+        const insufficientPlayers = await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-without-players',
+            payload: {}
+        });
+        assert.equal(insufficientPlayers.payload.code, 'INSUFFICIENT_PLAYERS');
+        assert.equal(database.prepare('SELECT status FROM rooms').get().status, 'waiting');
+
         const guest = await connectClient();
         await hello(guest, '22222222-2222-4222-8222-222222222222');
         await sendRequest(guest, {
@@ -582,10 +601,11 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 1,
                 time_limit_seconds: 60,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        await joinGuest(roomId, 'join-room-for-match-timeout');
         insertQuestions(3);
         const endedPromise = waitForMessage(owner, 'match.ended');
         await sendRequest(owner, {
@@ -628,10 +648,11 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 1,
                 time_limit_seconds: 60,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        await joinGuest(roomId, 'join-room-for-answer-deadline');
         insertQuestions(3);
         const questionPromise = waitForMessage(owner, 'question.presented');
         const endedPromise = waitForMessage(owner, 'match.ended');
@@ -668,10 +689,11 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 1,
                 time_limit_seconds: 60,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        await joinGuest(roomId, 'join-room-for-movement-deadline');
         insertQuestions(3);
         const endedPromise = waitForMessage(owner, 'match.ended');
         await sendRequest(owner, {
@@ -711,12 +733,14 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 1,
                 time_limit_seconds: 60,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        const guest = await joinGuest(roomId, 'join-room-for-final-answer-race');
         insertQuestions(3);
         const questionPromise = waitForMessage(owner, 'question.presented');
+        const guestQuestionPromise = waitForMessage(guest, 'question.presented');
         const endedPromise = waitForMessage(owner, 'match.ended');
         await sendRequest(owner, {
             type: 'match.start',
@@ -726,6 +750,7 @@ describe('room creation and listing WebSocket events', () => {
         const match = server.presence.rooms.get(roomId).match;
         const timeoutTimer = match.timeoutTimer;
         let question = (await questionPromise).payload;
+        let guestQuestion = (await guestQuestionPromise).payload;
 
         for (let floor = 1; floor <= 3; floor += 1) {
             if (floor === 3) now = match.deadline - 1;
@@ -738,6 +763,19 @@ describe('room creation and listing WebSocket events', () => {
             });
             assert.equal(answer.payload.correct, true);
             if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+        }
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            if (floor === 3) now = match.deadline - 1;
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(guest, 'question.presented') : null;
+            const answer = await sendRequest(guest, {
+                type: 'question.answer',
+                request_id: `guest-final-answer-race-${floor}`,
+                payload: { question_id: guestQuestion.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) guestQuestion = (await nextQuestionPromise).payload;
         }
 
         const ended = await endedPromise;
@@ -759,12 +797,14 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 1,
                 time_limit_seconds: null,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        const guest = await joinGuest(roomId, 'join-room-for-classic-completion');
         insertQuestions(3);
         const questionPromise = waitForMessage(owner, 'question.presented');
+        const guestQuestionPromise = waitForMessage(guest, 'question.presented');
         const endedPromise = waitForMessage(owner, 'match.ended');
         await sendRequest(owner, {
             type: 'match.start',
@@ -772,6 +812,7 @@ describe('room creation and listing WebSocket events', () => {
             payload: {}
         });
         let question = (await questionPromise).payload;
+        let guestQuestion = (await guestQuestionPromise).payload;
         const match = server.presence.rooms.get(roomId).match;
         assert.equal(match.deadline, null);
         assert.equal(match.timeoutTimer, null);
@@ -786,6 +827,18 @@ describe('room creation and listing WebSocket events', () => {
             });
             assert.equal(answer.payload.correct, true);
             if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+        }
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(guest, 'question.presented') : null;
+            const answer = await sendRequest(guest, {
+                type: 'question.answer',
+                request_id: `classic-guest-completion-${floor}`,
+                payload: { question_id: guestQuestion.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) guestQuestion = (await nextQuestionPromise).payload;
         }
 
         const ended = await endedPromise;
@@ -967,11 +1020,38 @@ describe('room creation and listing WebSocket events', () => {
             payload: { room_id: roomId }
         });
         insertQuestions(3);
+        const ownerSnapshot = waitForMessage(owner, 'match.snapshot');
+        const guestSnapshot = waitForMessage(guest, 'match.snapshot');
         await sendRequest(owner, {
             type: 'match.start',
             request_id: 'start-room-for-movement',
             payload: {}
         });
+        const [ownerMatchSnapshot, guestMatchSnapshot] = await Promise.all([
+            ownerSnapshot,
+            guestSnapshot
+        ]);
+        for (const snapshot of [ownerMatchSnapshot, guestMatchSnapshot]) {
+            assert.deepEqual(
+                snapshot.payload.players.map(player => ({
+                    user_id: player.user_id,
+                    nickname: player.nickname,
+                    character_id: player.character_id
+                })),
+                [
+                    {
+                        user_id: playerId,
+                        nickname: 'Player One',
+                        character_id: 'avatar-1'
+                    },
+                    {
+                        user_id: guestId,
+                        nickname: 'Player One',
+                        character_id: 'avatar-1'
+                    }
+                ]
+            );
+        }
 
         const ownerMoved = waitForMessage(owner, 'player.moved');
         const guestMoved = waitForMessage(guest, 'player.moved');
@@ -987,6 +1067,8 @@ describe('room creation and listing WebSocket events', () => {
         assert.deepEqual(ownerUpdate.payload, {
             revision: 1,
             user_id: playerId,
+            nickname: 'Player One',
+            character_id: 'avatar-1',
             sequence: 0,
             direction: 'east',
             x: 51,
@@ -1028,10 +1110,11 @@ describe('room creation and listing WebSocket events', () => {
                 floors: 3,
                 notebooks_per_floor: 2,
                 time_limit_seconds: null,
-                max_players: 1
+                max_players: 2
             }
         });
         const roomId = created.payload.room.room_id;
+        await joinGuest(roomId, 'join-classic-progression');
         insertQuestions(6);
 
         const initialQuestionPromise = waitForMessage(owner, 'question.presented');
@@ -1267,7 +1350,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(server.presence.rooms.get(roomId).match, null);
     });
 
-    it('ends a single-player deathmatch immediately with that player as winner', async () => {
+    it('rejects a single-player deathmatch', async () => {
         const owner = await connectClient();
         await hello(owner);
         const created = await sendRequest(owner, {
@@ -1285,16 +1368,13 @@ describe('room creation and listing WebSocket events', () => {
         const roomId = created.payload.room.room_id;
         insertQuestions(3);
 
-        const endedPromise = waitForMessage(owner, 'match.ended');
-        await sendRequest(owner, {
+        const rejected = await sendRequest(owner, {
             type: 'match.start',
             request_id: 'start-solo-deathmatch',
             payload: {}
         });
-        const ended = await endedPromise;
 
-        assert.equal(ended.payload.reason, 'last_player_standing');
-        assert.equal(ended.payload.entries[0].user_id, playerId);
+        assert.equal(rejected.payload.code, 'INSUFFICIENT_PLAYERS');
         assert.equal(server.presence.rooms.get(roomId).match, null);
         assert.equal(
             database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,

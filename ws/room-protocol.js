@@ -101,8 +101,11 @@ function matchSnapshot(roomId, presence, userId) {
             .filter(player => visibleIds.has(player.userId))
             .map(player => ({
                 user_id: player.userId,
+                nickname: player.nickname,
+                character_id: player.characterId,
                 x: match.movement.get(player.userId)?.x ?? 50,
                 y: match.movement.get(player.userId)?.y ?? 50,
+                direction: match.movement.get(player.userId)?.direction ?? 'stop',
                 floor: match.progress.get(player.userId)?.floor ?? 1,
                 status: player.status === 'active' ? 'playing' : 'eliminated'
             }))
@@ -593,6 +596,8 @@ function handlePlayerMove(socket, payload, requestId, presence) {
     const event = {
         revision: match.movementRevision,
         user_id: socket.userId,
+        nickname: player.nickname,
+        character_id: player.characterId,
         sequence: movement.sequence,
         direction: movement.direction,
         x: movement.x,
@@ -1208,6 +1213,17 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
         return;
     }
 
+    const roomPresence = getRoomPresence(presence, room.id);
+    if (roomPresence.players.length < 2) {
+        sendError(
+            socket,
+            'INSUFFICIENT_PLAYERS',
+            'São necessários pelo menos dois jogadores para iniciar a partida.',
+            requestId
+        );
+        return;
+    }
+
     try {
         const questions = database
             .prepare(
@@ -1230,9 +1246,9 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
                 : matchDistribution.startedAt + room.time_limit_seconds * 1000;
 
         updateRoom(database, room.id, { status: 'playing' });
-        const roomPresence = presence.rooms.get(room.id);
-        roomPresence.match = matchDistribution;
-        roomPresence.revision += 1;
+        const activeRoomPresence = presence.rooms.get(room.id);
+        activeRoomPresence.match = matchDistribution;
+        activeRoomPresence.revision += 1;
         scheduleMatchTimeout(matchDistribution, room.id, presence);
 
         const snapshot = roomSnapshot(database, presence, room.id);
