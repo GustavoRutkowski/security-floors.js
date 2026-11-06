@@ -107,6 +107,18 @@ export function createMatchDistribution({
         movementRevision: 0,
         movement: new Map(
             playerIds.map(playerId => [playerId, { x: 50, y: 50, direction: 'stop', sequence: -1 }])
+        ),
+        progress: new Map(
+            playerIds.map(playerId => [
+                playerId,
+                {
+                    floor: 1,
+                    notebookIndex: 0,
+                    status: 'playing',
+                    doorOpensAt: null,
+                    doorTimer: null
+                }
+            ])
         )
     };
 }

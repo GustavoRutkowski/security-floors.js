@@ -15,7 +15,7 @@
 ## Partidas e questoes
 
 - O servidor WebSocket valida acoes e e a autoridade para o estado compartilhado e o ranking.
-- No classico, uma resposta correta avanca o jogador; se errar todos os cadernos do andar, aguarda a abertura da porta.
+- No classico, o servidor apresenta ao jogador os cadernos do andar na ordem individual sorteada para ele. Uma resposta correta em qualquer caderno avanca imediatamente um andar. Cada caderno so pode ser respondido uma vez por andar; se todas as respostas estiverem erradas, o jogador aguarda 5 segundos e entao avanca automaticamente quando a porta abre.
 - No mata-mata, errar elimina o jogador. A partida termina quando as questoes acabam ou resta um jogador.
 - O ranking classico prioriza quem alcanca primeiro o andar final.
 - Questões sao de multipla escolha; verdadeiro/falso e representado por duas alternativas. A resposta correta e armazenada como indice baseado em zero.

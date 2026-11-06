@@ -17,6 +17,7 @@ import {
 } from './presence.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CLASSIC_DOOR_WAIT_MS = 5000;
 const SESSION_FIELDS = new Set(['protocol_version', 'user_id', 'nickname', 'character_id']);
 const ROOM_CREATE_FIELDS = new Set([
     'name',
@@ -340,6 +341,170 @@ function handlePlayerMove(socket, payload, requestId, presence) {
         const connection = presence.connections.get(viewerId);
         if (connection) send(connection, 'player.moved', event);
     }
+}
+
+function sendCurrentQuestion(socket, match, userId, progress) {
+    const floor = match.players
+        .get(userId)
+        ?.find(playerFloor => playerFloor.floor === progress.floor);
+    const notebook = floor?.notebooks[progress.notebookIndex];
+    const question = notebook && match.questions.get(notebook.questionId);
+    if (!notebook || !question) return false;
+
+    send(socket, 'question.presented', {
+        question_id: question.id,
+        floor: progress.floor,
+        notebook_id: notebook.notebookId,
+        notebook_label: notebook.notebookLabel,
+        prompt: question.prompt,
+        options: [...question.options]
+    });
+    return true;
+}
+
+function openNextClassicFloor({ match, progress, roomId, userId, presence }) {
+    const roomPresence = presence.rooms.get(roomId);
+    if (
+        roomPresence?.match !== match ||
+        !roomPresence.playerIds.has(userId) ||
+        progress.status !== 'cooldown'
+    ) {
+        return;
+    }
+
+    progress.doorTimer = null;
+    progress.doorOpensAt = null;
+    progress.floor += 1;
+    progress.notebookIndex = 0;
+    const player = presence.players.get(userId);
+    if (progress.floor > match.players.get(userId).length) {
+        progress.status = 'finished';
+        return;
+    }
+
+    progress.status = 'playing';
+    const connection = presence.connections.get(userId);
+    if (player?.connected && connection) sendCurrentQuestion(connection, match, userId, progress);
+}
+
+function handleQuestionAnswer(socket, payload, requestId, database, presence) {
+    if (
+        !isRecord(payload) ||
+        !hasOnlyFields(payload, new Set(['question_id', 'option_index'])) ||
+        !Number.isSafeInteger(payload.question_id) ||
+        payload.question_id < 1 ||
+        !Number.isSafeInteger(payload.option_index) ||
+        payload.option_index < 0
+    ) {
+        sendError(socket, 'INVALID_MESSAGE', 'Resposta inválida.', requestId);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+    if (!player.connected || presence.connections.get(socket.userId) !== socket) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'Esta conexão não controla o jogador.', requestId);
+        return;
+    }
+    if (player.status !== 'active') {
+        sendError(
+            socket,
+            'FORBIDDEN_ROLE',
+            'Espectadores não podem responder questões.',
+            requestId
+        );
+        return;
+    }
+
+    const room = database && listRooms(database).find(candidate => candidate.id === player.roomId);
+    const match = presence.rooms.get(player.roomId)?.match;
+    const progress = match?.progress.get(socket.userId);
+    if (room?.status !== 'playing' || room.mode !== 'classic' || !match || !progress) {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'A resposta não está disponível nesta partida.',
+            requestId
+        );
+        return;
+    }
+    if (progress.status !== 'playing') {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'Aguarde a abertura da porta antes de responder.',
+            requestId
+        );
+        return;
+    }
+
+    const floor = match.players
+        .get(socket.userId)
+        ?.find(playerFloor => playerFloor.floor === progress.floor);
+    const notebook = floor?.notebooks[progress.notebookIndex];
+    const question = notebook && match.questions.get(notebook.questionId);
+    if (
+        !question ||
+        question.id !== payload.question_id ||
+        payload.option_index >= question.options.length
+    ) {
+        sendError(
+            socket,
+            'INVALID_ANSWER',
+            'A questão ou alternativa não está disponível.',
+            requestId
+        );
+        return;
+    }
+
+    const correct = payload.option_index === question.correct_option_index;
+    const result = {
+        question_id: question.id,
+        correct,
+        correct_option_index: question.correct_option_index,
+        explanation: question.explanation,
+        floor: progress.floor
+    };
+
+    if (correct) {
+        progress.floor += 1;
+        progress.notebookIndex = 0;
+        if (progress.floor > match.players.get(socket.userId).length) {
+            progress.status = 'finished';
+        } else {
+            send(socket, 'answer.result', result, requestId);
+            sendCurrentQuestion(socket, match, socket.userId, progress);
+            return;
+        }
+    } else {
+        progress.notebookIndex += 1;
+        if (progress.notebookIndex < floor.notebooks.length) {
+            send(socket, 'answer.result', result, requestId);
+            sendCurrentQuestion(socket, match, socket.userId, progress);
+            return;
+        }
+
+        progress.status = 'cooldown';
+        progress.doorOpensAt = Date.now() + CLASSIC_DOOR_WAIT_MS;
+        progress.doorTimer = presence.setTimeoutFn(
+            () =>
+                openNextClassicFloor({
+                    match,
+                    progress,
+                    roomId: player.roomId,
+                    userId: socket.userId,
+                    presence
+                }),
+            CLASSIC_DOOR_WAIT_MS
+        );
+        progress.doorTimer.unref?.();
+        result.retry_after_ms = CLASSIC_DOOR_WAIT_MS;
+    }
+
+    send(socket, 'answer.result', result, requestId);
 }
 
 function ensurePresenceRooms(database, presence) {
@@ -702,6 +867,20 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
             }
         }
         broadcastRoomSnapshot(server, database, presence, room.id);
+        if (room.mode === 'classic') {
+            for (const participant of snapshot.participants) {
+                const connection = presence.connections.get(participant.user_id);
+                const progress = matchDistribution.progress.get(participant.user_id);
+                if (connection && progress) {
+                    sendCurrentQuestion(
+                        connection,
+                        matchDistribution,
+                        participant.user_id,
+                        progress
+                    );
+                }
+            }
+        }
     } catch (error) {
         if (error.code === 'INSUFFICIENT_QUESTIONS') {
             sendError(
@@ -776,7 +955,8 @@ function attachSocketProtocol(socket, context) {
                 'room.leave',
                 'room.configure',
                 'match.start',
-                'spectator.follow'
+                'spectator.follow',
+                'question.answer'
             ].includes(message.type) &&
             !requestId
         ) {
@@ -843,6 +1023,9 @@ function attachSocketProtocol(socket, context) {
                 break;
             case 'player.move':
                 handlePlayerMove(socket, message.payload, requestId, presence);
+                break;
+            case 'question.answer':
+                handleQuestionAnswer(socket, message.payload, requestId, database, presence);
                 break;
             default:
                 sendError(socket, 'INVALID_MESSAGE', 'Tipo de mensagem desconhecido.', requestId);

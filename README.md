@@ -16,8 +16,8 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 - Você está num prédio de X andares
 - Cada andar possui K cadernos de tarefas
 - Se você acertar a resposta, passa para o próximo andar
-- Você só pode passar para o próximo andar se acertar alguma das K questões (algum dos cadernos)
-- Se você errar as questões de todos os cadernos, estará sujeito a um tempo de espera de S segundos para que a porta se abra para você
+- Você passa para o próximo andar ao acertar qualquer uma das K questões, apresentadas em uma ordem individual de cadernos
+- Se errar todos os cadernos do andar, aguarda 5 segundos; quando a porta abre, avança automaticamente para o próximo andar
 - O ranking/placar é dado em ordem crescente do jogador que chegar primeiro no andar final
 - Quando todos os jogadores chegam até o topo (ou o tempo T se encerra), a partida acaba e uma tela com ranking é exibida
 

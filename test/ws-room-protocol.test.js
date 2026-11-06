@@ -640,6 +640,96 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(server.presence.rooms.get(roomId).match.movement.get(playerId).x, 51);
     });
 
+    it('advances classic players and opens the next floor after the door wait', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-classic-progression',
+            payload: {
+                name: 'Classic progression',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 2,
+                time_limit_seconds: null,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(6);
+
+        const initialQuestionPromise = waitForMessage(owner, 'question.presented');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-classic-progression',
+            payload: {}
+        });
+        const firstQuestion = (await initialQuestionPromise).payload;
+        assert.equal(firstQuestion.floor, 1);
+        assert.equal('correct_option_index' in firstQuestion, false);
+        assert.equal('explanation' in firstQuestion, false);
+
+        const secondQuestionPromise = waitForMessage(owner, 'question.presented');
+        const firstWrongAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-first-wrong',
+            payload: { question_id: firstQuestion.question_id, option_index: 1 }
+        });
+        const secondQuestion = (await secondQuestionPromise).payload;
+        assert.equal(firstWrongAnswer.payload.correct, false);
+        assert.equal(firstWrongAnswer.payload.correct_option_index, 0);
+        assert.equal(secondQuestion.floor, 1);
+        assert.notEqual(secondQuestion.question_id, firstQuestion.question_id);
+
+        const lastWrongAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-last-wrong',
+            payload: { question_id: secondQuestion.question_id, option_index: 1 }
+        });
+        assert.equal(lastWrongAnswer.payload.correct, false);
+        assert.equal(lastWrongAnswer.payload.retry_after_ms, 5000);
+        assert.equal(
+            server.presence.rooms.get(roomId).match.progress.get(playerId).status,
+            'cooldown'
+        );
+
+        const duringCooldown = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-answer-during-cooldown',
+            payload: { question_id: secondQuestion.question_id, option_index: 0 }
+        });
+        assert.equal(duringCooldown.payload.code, 'ACTION_NOT_ALLOWED');
+
+        const doorTimer = [...disconnectTimers]
+            .reverse()
+            .find(timer => timer.delay === 5000 && !timer.cleared);
+        assert.ok(doorTimer);
+        const floorTwoQuestionPromise = waitForMessage(owner, 'question.presented');
+        doorTimer.callback();
+        const floorTwoQuestion = (await floorTwoQuestionPromise).payload;
+        assert.equal(floorTwoQuestion.floor, 2);
+
+        const floorTwoNotebookPromise = waitForMessage(owner, 'question.presented');
+        const floorTwoWrongAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-floor-two-first-wrong',
+            payload: { question_id: floorTwoQuestion.question_id, option_index: 1 }
+        });
+        const floorTwoNotebook = (await floorTwoNotebookPromise).payload;
+        assert.equal(floorTwoWrongAnswer.payload.correct, false);
+        assert.equal(floorTwoNotebook.floor, 2);
+
+        const floorThreeQuestionPromise = waitForMessage(owner, 'question.presented');
+        const floorTwoCorrectAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-floor-two-second-correct',
+            payload: { question_id: floorTwoNotebook.question_id, option_index: 0 }
+        });
+        const floorThreeQuestion = (await floorThreeQuestionPromise).payload;
+        assert.equal(floorTwoCorrectAnswer.payload.correct, true);
+        assert.equal(floorThreeQuestion.floor, 3);
+    });
+
     it('transfers ownership on leave and deletes the room after its final player leaves', async () => {
         const owner = await connectClient();
         await hello(owner);
