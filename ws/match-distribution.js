@@ -103,6 +103,10 @@ export function createMatchDistribution({
         mode,
         floors: floorsDistribution,
         questions: questionsById,
-        players
+        players,
+        movementRevision: 0,
+        movement: new Map(
+            playerIds.map(playerId => [playerId, { x: 50, y: 50, direction: 'stop', sequence: -1 }])
+        )
     };
 }

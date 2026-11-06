@@ -50,10 +50,16 @@ function sendRequest(client, message) {
 }
 
 function waitForMessage(client, type) {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            client.off('message', onMessage);
+            reject(new Error(`Timed out waiting for ${type}`));
+        }, 1000);
+
         function onMessage(data) {
             const message = JSON.parse(data.toString('utf8'));
             if (message.type !== type) return;
+            clearTimeout(timeout);
             client.off('message', onMessage);
             resolve(message);
         }
@@ -559,6 +565,81 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(repeatedStart.payload.code, 'ROOM_IN_PROGRESS');
     });
 
+    it('synchronizes authoritative movement and rejects stale or malformed input', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-movement',
+            payload: {
+                name: 'Movement',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-room-for-movement',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-movement',
+            payload: {}
+        });
+
+        const ownerMoved = waitForMessage(owner, 'player.moved');
+        const guestMoved = waitForMessage(guest, 'player.moved');
+        owner.send(
+            JSON.stringify({
+                type: 'player.move',
+                payload: { sequence: 0, direction: 'east' }
+            })
+        );
+        const ownerUpdate = await ownerMoved;
+        const guestUpdate = await guestMoved;
+        assert.deepEqual(ownerUpdate, guestUpdate);
+        assert.deepEqual(ownerUpdate.payload, {
+            revision: 1,
+            user_id: playerId,
+            sequence: 0,
+            direction: 'east',
+            x: 51,
+            y: 50
+        });
+
+        const stale = await sendRequest(owner, {
+            type: 'player.move',
+            request_id: 'stale-movement',
+            payload: { sequence: 0, direction: 'north' }
+        });
+        assert.equal(stale.payload.code, 'STALE_INPUT');
+
+        const invalid = await sendRequest(owner, {
+            type: 'player.move',
+            request_id: 'invalid-movement',
+            payload: { sequence: 1, direction: 'up' }
+        });
+        assert.equal(invalid.payload.code, 'INVALID_MESSAGE');
+
+        const forgedCoordinates = await sendRequest(owner, {
+            type: 'player.move',
+            request_id: 'forged-movement-coordinates',
+            payload: { sequence: 1, direction: 'east', x: 100, y: 100 }
+        });
+        assert.equal(forgedCoordinates.payload.code, 'INVALID_MESSAGE');
+        assert.equal(server.presence.rooms.get(roomId).match.movement.get(playerId).x, 51);
+    });
+
     it('transfers ownership on leave and deletes the room after its final player leaves', async () => {
         const owner = await connectClient();
         await hello(owner);
@@ -726,7 +807,14 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'join-deathmatch-for-handoff',
             payload: { room_id: roomId }
         });
-        updateRoom(database, roomId, { status: 'playing' });
+        insertQuestions(5);
+        const matchSnapshot = waitForMessage(guest, 'room.snapshot');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-spectator-movement',
+            payload: {}
+        });
+        await matchSnapshot;
 
         const disconnectSnapshot = waitForMessage(guest, 'room.snapshot');
         const ownerSocket = server.presence.connections.get(playerId);
@@ -784,7 +872,12 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'join-second-spectator-room',
             payload: { room_id: roomId }
         });
-        updateRoom(database, roomId, { status: 'playing' });
+        insertQuestions(5);
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-spectator-movement',
+            payload: {}
+        });
 
         const activeFollow = await sendRequest(owner, {
             type: 'spectator.follow',
@@ -813,6 +906,22 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(follow.type, 'spectator.following');
         assert.equal(follow.request_id, 'spectator-follows-second-guest');
         assert.equal(follow.payload.target_user_id, secondGuestId);
+
+        const spectatorMove = await sendRequest(firstGuest, {
+            type: 'player.move',
+            request_id: 'spectator-movement-denied',
+            payload: { sequence: 0, direction: 'east' }
+        });
+        assert.equal(spectatorMove.payload.code, 'FORBIDDEN_ROLE');
+
+        const followedMovement = waitForMessage(firstGuest, 'player.moved');
+        secondGuest.send(
+            JSON.stringify({
+                type: 'player.move',
+                payload: { sequence: 0, direction: 'north' }
+            })
+        );
+        assert.equal((await followedMovement).payload.user_id, secondGuestId);
 
         const invalidFollow = await sendRequest(firstGuest, {
             type: 'spectator.follow',

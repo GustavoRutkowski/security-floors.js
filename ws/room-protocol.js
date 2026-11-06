@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { createRoom, deleteRoom, listRooms, updateRoom } from '../db/rooms.js';
 import { createMatchDistribution } from './match-distribution.js';
+import { isMovementDirection, movePosition } from './player-movement.js';
 import {
     connectPlayer,
     createPresenceRoom,
     deletePresenceRoom,
     disconnectPlayer,
+    getPlayerViewers,
     getRoomPresence,
     joinRoomPresence,
     leaveRoomPresence,
@@ -262,6 +264,81 @@ function handleSpectatorFollow(socket, payload, requestId, presence) {
             'O alvo deve ser um jogador ativo desta sala.',
             requestId
         );
+    }
+}
+
+function handlePlayerMove(socket, payload, requestId, presence) {
+    if (
+        !isRecord(payload) ||
+        !hasOnlyFields(payload, new Set(['sequence', 'direction'])) ||
+        !Number.isSafeInteger(payload.sequence) ||
+        payload.sequence < 0 ||
+        !isMovementDirection(payload.direction)
+    ) {
+        sendError(socket, 'INVALID_MESSAGE', 'Intenção de movimento inválida.', requestId);
+        return;
+    }
+
+    const player = presence.players.get(socket.userId);
+    if (!player?.roomId) {
+        sendError(socket, 'NOT_IN_ROOM', 'Você não está em uma sala.', requestId);
+        return;
+    }
+    if (!player.connected || presence.connections.get(socket.userId) !== socket) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'Esta conexão não controla o jogador.', requestId);
+        return;
+    }
+    if (player.status !== 'active') {
+        sendError(socket, 'FORBIDDEN_ROLE', 'Espectadores não podem se movimentar.', requestId);
+        return;
+    }
+
+    const roomPresence = presence.rooms.get(player.roomId);
+    const match = roomPresence?.match;
+    const movement = match?.movement.get(socket.userId);
+    if (!movement) {
+        sendError(
+            socket,
+            'ACTION_NOT_ALLOWED',
+            'A partida ainda não está em andamento.',
+            requestId
+        );
+        return;
+    }
+    if (payload.sequence <= movement.sequence) {
+        sendError(
+            socket,
+            'STALE_INPUT',
+            'A sequência de movimento é antiga ou repetida.',
+            requestId
+        );
+        return;
+    }
+
+    const position = movePosition(movement, payload.direction);
+    Object.assign(movement, position, {
+        direction: payload.direction,
+        sequence: payload.sequence
+    });
+    match.movementRevision += 1;
+
+    const event = {
+        revision: match.movementRevision,
+        user_id: socket.userId,
+        sequence: movement.sequence,
+        direction: movement.direction,
+        x: movement.x,
+        y: movement.y
+    };
+    const viewerIds = new Set(
+        getPlayerViewers(presence, player.roomId, socket.userId).map(viewer => viewer.userId)
+    );
+    for (const participant of getRoomPresence(presence, player.roomId).players) {
+        if (participant.status === 'active') viewerIds.add(participant.userId);
+    }
+    for (const viewerId of viewerIds) {
+        const connection = presence.connections.get(viewerId);
+        if (connection) send(connection, 'player.moved', event);
     }
 }
 
@@ -763,6 +840,9 @@ function attachSocketProtocol(socket, context) {
                 break;
             case 'spectator.follow':
                 handleSpectatorFollow(socket, message.payload, requestId, presence);
+                break;
+            case 'player.move':
+                handlePlayerMove(socket, message.payload, requestId, presence);
                 break;
             default:
                 sendError(socket, 'INVALID_MESSAGE', 'Tipo de mensagem desconhecido.', requestId);
