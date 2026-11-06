@@ -18,99 +18,181 @@
                     <span class="brand-name">SECURITY<br /><strong>FLOORS</strong></span>
                 </a>
                 <div class="topbar-meta">
-                    <span class="build-tag">CLIENT BUILD / 00</span>
+                    <span class="build-tag">PROFILE / 00</span>
                     <span class="system-state" role="status" aria-live="polite">
                         <span class="state-lamp" aria-hidden="true"></span>
-                        <span id="boot-status">INICIALIZANDO</span>
+                        <span id="system-status">PERFIL LOCAL</span>
                     </span>
                 </div>
             </header>
 
-            <main class="main-grid">
-                <section class="world-panel" aria-labelledby="floor-title">
-                    <div class="panel-heading">
-                        <div>
-                            <p class="eyebrow">MAPA / ZONA 00</p>
-                            <h1 id="floor-title">HALL DE ENTRADA</h1>
-                        </div>
-                        <div class="floor-stamp" aria-label="Andar zero">
-                            <span>FLOOR</span>
-                            <strong>00</strong>
-                        </div>
+            <main id="profile-screen" class="profile-main">
+                <section class="profile-panel" aria-labelledby="profile-title">
+                    <div class="profile-heading">
+                        <p class="eyebrow">IDENTIDADE / NOVO JOGADOR</p>
+                        <h1 id="profile-title">QUEM VAI JOGAR?</h1>
+                        <p class="profile-subtitle">REGISTRO LOCAL <span>///</span> SEM CONTA</p>
                     </div>
 
-                    <div class="playfield-frame">
-                        <div
-                            id="game-root"
-                            role="img"
-                            aria-label="Vista superior do hall de entrada"
-                        >
-                            <div id="loading-layer" class="loading-layer" aria-live="polite">
-                                <span class="loader-chip" aria-hidden="true"></span>
-                                <p>CARREGANDO ANDAR</p>
-                                <span class="loading-track" aria-hidden="true"><i></i></span>
+                    <form id="profile-form" novalidate>
+                        <div class="nickname-field">
+                            <label for="nickname">NICKNAME</label>
+                            <div class="input-frame">
+                                <span class="input-prefix" aria-hidden="true">&gt;</span>
+                                <input
+                                    id="nickname"
+                                    name="nickname"
+                                    type="text"
+                                    maxlength="32"
+                                    autocomplete="nickname"
+                                    placeholder="SEU NOME NO JOGO"
+                                    required
+                                />
+                                <span class="character-limit" aria-hidden="true">32</span>
                             </div>
-                            <div id="boot-error" class="boot-error" role="alert" hidden>
-                                <span class="error-code">BOOT ERROR / 00</span>
-                                <h2>O jogo não iniciou</h2>
-                                <p id="boot-error-detail">
-                                    Ocorreu um erro ao preparar a tela. Recarregue para tentar
-                                    novamente.
-                                </p>
-                                <a class="retry-link" href="/">RECARREGAR</a>
-                            </div>
+                            <p class="field-hint">1 A 32 CARACTERES</p>
                         </div>
-                    </div>
 
-                    <footer class="world-footer">
-                        <span
-                            ><i class="status-dot" aria-hidden="true"></i> VISUALIZAÇÃO LOCAL</span
-                        >
-                        <span>COORD. <strong>00 : 00</strong></span>
-                    </footer>
+                        <fieldset class="character-fieldset">
+                            <legend>ESCOLHA SEU PERSONAGEM <span>/// 03</span></legend>
+                            <div class="character-grid" role="radiogroup" aria-label="Personagem">
+                                <label class="character-choice">
+                                    <input
+                                        type="radio"
+                                        name="character_id"
+                                        value="bobabao"
+                                        checked
+                                    />
+                                    <span class="character-choice-body">
+                                        <span class="character-choice-top">
+                                            <span
+                                                class="character-sprite character-sprite-small"
+                                                data-character="bobabao"
+                                                aria-hidden="true"
+                                            ></span>
+                                            <span class="choice-index">01</span>
+                                        </span>
+                                        <span class="character-name">BOBABAO</span>
+                                        <span class="choice-state">SELECIONAR</span>
+                                    </span>
+                                </label>
+                                <label class="character-choice">
+                                    <input type="radio" name="character_id" value="lixaredo" />
+                                    <span class="character-choice-body">
+                                        <span class="character-choice-top">
+                                            <span
+                                                class="character-sprite character-sprite-small"
+                                                data-character="lixaredo"
+                                                aria-hidden="true"
+                                            ></span>
+                                            <span class="choice-index">02</span>
+                                        </span>
+                                        <span class="character-name">LIXAREDO</span>
+                                        <span class="choice-state">SELECIONAR</span>
+                                    </span>
+                                </label>
+                                <label class="character-choice">
+                                    <input type="radio" name="character_id" value="tubarina" />
+                                    <span class="character-choice-body">
+                                        <span class="character-choice-top">
+                                            <span
+                                                class="character-sprite character-sprite-small"
+                                                data-character="tubarina"
+                                                aria-hidden="true"
+                                            ></span>
+                                            <span class="choice-index">03</span>
+                                        </span>
+                                        <span class="character-name">TUBARINA</span>
+                                        <span class="choice-state">SELECIONAR</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <p id="profile-error" class="form-message" role="alert" hidden></p>
+                        <button class="play-button" type="submit">
+                            <span>JOGAR</span>
+                            <span class="play-arrow" aria-hidden="true">&gt;&gt;</span>
+                        </button>
+                    </form>
                 </section>
 
-                <aside class="status-panel" aria-label="Estado do cliente">
-                    <div class="status-heading">
-                        <p class="eyebrow">TERMINAL / 001</p>
-                        <span class="online-mark">LOCAL</span>
+                <aside class="preview-panel" aria-label="Prévia do personagem">
+                    <div class="preview-heading">
+                        <div>
+                            <p class="eyebrow">AVATAR / PRÉVIA</p>
+                            <strong id="preview-name">BOBABAO</strong>
+                        </div>
+                        <span class="preview-index" id="preview-index">CHAR / 01</span>
                     </div>
 
-                    <div class="elevator-block" aria-hidden="true">
-                        <div class="elevator-rail">
-                            <span class="floor-level active"><b>00</b><i></i></span>
-                            <span class="floor-level"><b>01</b><i></i></span>
-                            <span class="floor-level"><b>02</b><i></i></span>
-                            <span class="floor-level"><b>03</b><i></i></span>
-                        </div>
-                        <span class="elevator-label">ELEVADOR</span>
+                    <div class="preview-stage" id="preview-stage" data-character="bobabao">
+                        <span class="preview-coordinate preview-coordinate-top">X / 00</span>
+                        <span class="preview-coordinate preview-coordinate-bottom">Y / 00</span>
+                        <span class="preview-platform" aria-hidden="true"></span>
+                        <span
+                            class="character-sprite character-sprite-large"
+                            id="character-preview"
+                            data-character="bobabao"
+                            role="img"
+                            aria-label="Bobabao"
+                        ></span>
+                        <span class="preview-marker" aria-hidden="true">PLAYER 01</span>
                     </div>
 
-                    <dl class="diagnostics">
-                        <div>
-                            <dt>RENDER</dt>
-                            <dd id="renderer-status">AGUARDANDO</dd>
-                        </div>
-                        <div>
-                            <dt>SESSÃO</dt>
-                            <dd>INATIVA</dd>
-                        </div>
-                        <div>
-                            <dt>REDE</dt>
-                            <dd>DESCONECTADA</dd>
-                        </div>
-                    </dl>
-
-                    <div class="panel-note">
-                        <span class="note-mark" aria-hidden="true">!</span>
-                        <p>TERMINAL DE JOGO<br /><strong>PRONTO PARA INICIALIZAÇÃO</strong></p>
+                    <div class="preview-footer">
+                        <span
+                            ><i class="status-dot" aria-hidden="true"></i> STANDING / WALKING</span
+                        >
+                        <span>16 <b>×</b> 16 PX</span>
                     </div>
                 </aside>
             </main>
 
+            <main id="home-screen" class="home-main" hidden>
+                <section class="home-panel" aria-labelledby="home-title">
+                    <div class="home-heading">
+                        <div>
+                            <p class="eyebrow">HOME / JOGADOR IDENTIFICADO</p>
+                            <h1 id="home-title">BEM-VINDA À BASE</h1>
+                        </div>
+                        <span class="home-state"
+                            ><i class="status-dot" aria-hidden="true"></i> LOCAL</span
+                        >
+                    </div>
+
+                    <div class="home-identity">
+                        <span
+                            class="character-sprite character-sprite-home"
+                            id="home-character"
+                            data-character="bobabao"
+                            aria-hidden="true"
+                        ></span>
+                        <div>
+                            <p class="eyebrow">SESSÃO ATIVA</p>
+                            <strong id="home-nickname">JOGADOR</strong>
+                            <span id="home-character-name">BOBABAO / CHAR 01</span>
+                        </div>
+                    </div>
+
+                    <div class="home-divider" aria-hidden="true"><span>///</span></div>
+                    <div class="home-footer">
+                        <p class="home-status">
+                            <span class="status-dot" aria-hidden="true"></span> PERFIL SALVO NESTE
+                            NAVEGADOR
+                        </p>
+                        <button id="edit-profile" class="secondary-button" type="button">
+                            EDITAR PERFIL
+                        </button>
+                    </div>
+                </section>
+            </main>
+
             <footer class="page-footer">
                 <span>SECURITY FLOORS <span class="footer-divider">/</span> PROTÓTIPO</span>
-                <span>CLIENTE LOCAL <span class="footer-divider">/</span> SEM SESSÃO</span>
+                <span id="footer-state"
+                    >CLIENTE LOCAL <span class="footer-divider">/</span> PERFIL</span
+                >
             </footer>
         </div>
 
@@ -118,28 +200,6 @@
             <p class="noscript-message">Ative JavaScript para inicializar Security Floors.</p>
         </noscript>
 
-        <script>
-            window.showBootError = function (reason) {
-                const panel = document.getElementById('boot-error');
-                const loading = document.getElementById('loading-layer');
-                const status = document.getElementById('boot-status');
-                const renderer = document.getElementById('renderer-status');
-                const details = document.getElementById('boot-error-detail');
-
-                if (!panel) return;
-
-                panel.hidden = false;
-                loading.hidden = true;
-                status.textContent = 'FALHA NO BOOT';
-                renderer.textContent = 'ERRO';
-                if (reason && reason.message) details.textContent = reason.message;
-            };
-
-            window.addEventListener('error', event => window.showBootError(event.error));
-            window.addEventListener('unhandledrejection', event =>
-                window.showBootError(event.reason)
-            );
-        </script>
         <script type="module" src="/main.js"></script>
     </body>
 </html>

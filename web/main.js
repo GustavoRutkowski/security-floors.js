@@ -1,125 +1,99 @@
 import '@fontsource/press-start-2p';
-import Phaser from 'phaser';
 import './style.css';
+import { CHARACTERS, loadProfile, saveProfile } from './profile.js';
 
-const bootStartedAt = performance.now();
-const minimumLoadingTime = 420;
+const profileScreen = document.getElementById('profile-screen');
+const homeScreen = document.getElementById('home-screen');
+const profileForm = document.getElementById('profile-form');
+const nicknameInput = document.getElementById('nickname');
+const profileError = document.getElementById('profile-error');
+const characterInputs = [...document.querySelectorAll('input[name="character_id"]')];
 
-function showReadyState() {
-    const remaining = Math.max(0, minimumLoadingTime - (performance.now() - bootStartedAt));
-
-    window.setTimeout(() => {
-        document.getElementById('loading-layer').hidden = true;
-        document.getElementById('boot-status').textContent = 'CLIENTE PRONTO';
-        document.getElementById('renderer-status').textContent = 'PHASER OK';
-        document.documentElement.dataset.state = 'ready';
-    }, remaining);
+function getCharacter(characterId) {
+    return CHARACTERS.find(character => character.id === characterId) ?? CHARACTERS[0];
 }
 
-class EntryScene extends Phaser.Scene {
-    constructor() {
-        super('EntryScene');
-    }
+function updateCharacterPreview(characterId) {
+    const character = getCharacter(characterId);
+    const preview = document.getElementById('character-preview');
+    const stage = document.getElementById('preview-stage');
 
-    create() {
-        try {
-            this.drawFloor();
-            this.scale.on('resize', this.drawFloor, this);
-            showReadyState();
-        } catch (error) {
-            window.showBootError(error);
-        }
-    }
+    preview.dataset.character = character.id;
+    preview.setAttribute('aria-label', character.name);
+    stage.dataset.character = character.id;
+    document.getElementById('preview-name').textContent = character.name;
+    document.getElementById('preview-index').textContent =
+        `CHAR / ${String(CHARACTERS.indexOf(character) + 1).padStart(2, '0')}`;
+}
 
-    drawFloor() {
-        this.children.removeAll(true);
+function setScreen(screenName, profile) {
+    const showHome = screenName === 'home';
+    profileScreen.hidden = showHome;
+    homeScreen.hidden = !showHome;
+    document.documentElement.dataset.screen = screenName;
+    document.getElementById('system-status').textContent = showHome
+        ? 'PERFIL ATIVO'
+        : 'PERFIL LOCAL';
+    document.getElementById('footer-state').textContent = showHome
+        ? 'CLIENTE LOCAL / HOME'
+        : 'CLIENTE LOCAL / PERFIL';
 
-        const width = this.scale.width;
-        const height = this.scale.height;
-        const tileSize = 32;
-        const graphics = this.add.graphics();
-
-        this.cameras.main.setBackgroundColor('#172226');
-
-        for (let row = 0; row < Math.ceil(height / tileSize); row += 1) {
-            for (let column = 0; column < Math.ceil(width / tileSize); column += 1) {
-                const shade = (row + column) % 2 === 0 ? 0x1b292d : 0x1e2d31;
-                graphics.fillStyle(shade, 1);
-                graphics.fillRect(column * tileSize, row * tileSize, tileSize, tileSize);
-            }
-        }
-
-        graphics.lineStyle(1, 0x344448, 0.6);
-        for (let x = 0; x <= width; x += tileSize) {
-            graphics.lineBetween(x, 0, x, height);
-        }
-        for (let y = 0; y <= height; y += tileSize) {
-            graphics.lineBetween(0, y, width, y);
-        }
-
-        graphics.fillStyle(0x10191c, 1);
-        graphics.fillRect(0, 0, width, 18);
-        graphics.fillRect(0, height - 18, width, 18);
-        graphics.fillRect(0, 0, 18, height);
-        graphics.fillRect(width - 18, 0, 18, height);
-
-        const centerX = Math.floor(width / 2);
-        const centerY = Math.floor(height / 2);
-        graphics.fillStyle(0x293a3e, 1);
-        graphics.fillRect(centerX - 70, centerY - 54, 140, 108);
-        graphics.fillStyle(0x10191c, 1);
-        graphics.fillRect(centerX - 54, centerY - 38, 108, 76);
-
-        graphics.fillStyle(0xf18467, 1);
-        graphics.fillRect(centerX - 9, centerY - 22, 18, 18);
-        graphics.fillStyle(0xa8d86e, 1);
-        graphics.fillRect(centerX - 12, centerY - 3, 24, 25);
-        graphics.fillStyle(0x10191c, 1);
-        graphics.fillRect(centerX - 9, centerY + 19, 6, 9);
-        graphics.fillRect(centerX + 3, centerY + 19, 6, 9);
-
-        graphics.fillStyle(0x78bfc0, 1);
-        graphics.fillRect(centerX - 38, height - 18, 76, 8);
-        graphics.fillStyle(0xf0ad5e, 1);
-        graphics.fillRect(width - 34, centerY - 6, 8, 12);
-
-        this.add
-            .text(centerX, centerY - 78, 'ENTRY HALL / 00', {
-                color: '#dce6d5',
-                fontFamily: 'Press Start 2P',
-                fontSize: '10px'
-            })
-            .setOrigin(0.5);
-
-        this.add
-            .text(width - 44, centerY + 22, 'LIFT', {
-                color: '#f0ad5e',
-                fontFamily: 'Press Start 2P',
-                fontSize: '8px'
-            })
-            .setOrigin(1, 0);
+    if (showHome && profile) {
+        const character = getCharacter(profile.character_id);
+        document.getElementById('home-nickname').textContent = profile.nickname;
+        document.getElementById('home-character-name').textContent =
+            `${character.name} / CHAR ${String(CHARACTERS.indexOf(character) + 1).padStart(2, '0')}`;
+        document.getElementById('home-character').dataset.character = character.id;
     }
 }
 
-try {
-    new Phaser.Game({
-        type: Phaser.AUTO,
-        parent: 'game-root',
-        backgroundColor: '#172226',
-        pixelArt: true,
-        scale: {
-            mode: Phaser.Scale.RESIZE,
-            autoCenter: Phaser.Scale.CENTER_BOTH,
-            width: 960,
-            height: 540
-        },
-        render: {
-            antialias: false,
-            pixelArt: true,
-            roundPixels: true
-        },
-        scene: [EntryScene]
+function applyProfileToForm(profile) {
+    if (!profile) return;
+    nicknameInput.value = profile.nickname;
+    const selectedInput = characterInputs.find(input => input.value === profile.character_id);
+    if (selectedInput) selectedInput.checked = true;
+    updateCharacterPreview(profile.character_id);
+}
+
+for (const input of characterInputs) {
+    input.addEventListener('change', () => {
+        if (input.checked) updateCharacterPreview(input.value);
     });
-} catch (error) {
-    window.showBootError(error);
 }
+
+profileForm.addEventListener('submit', event => {
+    event.preventDefault();
+    profileError.hidden = true;
+
+    const selectedCharacter = characterInputs.find(input => input.checked)?.value;
+    try {
+        const profile = saveProfile({
+            nickname: nicknameInput.value,
+            character_id: selectedCharacter
+        });
+        applyProfileToForm(profile);
+        setScreen('home', profile);
+        window.dispatchEvent(new CustomEvent('security-floors:profile-ready', { detail: profile }));
+    } catch (error) {
+        profileError.textContent =
+            error.message || 'Não foi possível salvar o perfil neste navegador.';
+        profileError.hidden = false;
+        if (!nicknameInput.value.trim()) nicknameInput.focus();
+    }
+});
+
+document.getElementById('edit-profile').addEventListener('click', () => {
+    applyProfileToForm(loadProfile());
+    setScreen('profile');
+    nicknameInput.focus();
+});
+
+for (const input of characterInputs) {
+    input.addEventListener('focus', () => {
+        input.closest('.character-choice').scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+}
+
+const storedProfile = loadProfile();
+if (storedProfile) applyProfileToForm(storedProfile);
+setScreen('profile');
