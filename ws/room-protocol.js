@@ -78,6 +78,48 @@ function roomSnapshot(database, presence, roomId) {
     };
 }
 
+function matchSnapshot(roomId, presence, userId) {
+    const roomPresence = presence.rooms.get(roomId);
+    const match = roomPresence?.match;
+    const presenceSnapshot = roomPresence ? getRoomPresence(presence, roomId) : null;
+    const viewer = presenceSnapshot?.players.find(player => player.userId === userId);
+    if (!match || !viewer) return null;
+
+    const visibleIds = new Set();
+    if (viewer.status === 'active') {
+        for (const player of presenceSnapshot.players) {
+            if (player.status === 'active') visibleIds.add(player.userId);
+        }
+    } else {
+        visibleIds.add(viewer.userId);
+        if (viewer.targetUserId) visibleIds.add(viewer.targetUserId);
+    }
+
+    return {
+        revision: match.movementRevision,
+        players: presenceSnapshot.players
+            .filter(player => visibleIds.has(player.userId))
+            .map(player => ({
+                user_id: player.userId,
+                x: match.movement.get(player.userId)?.x ?? 50,
+                y: match.movement.get(player.userId)?.y ?? 50,
+                floor: match.progress.get(player.userId)?.floor ?? 1,
+                status: player.status === 'active' ? 'playing' : 'eliminated'
+            }))
+    };
+}
+
+function sendMatchSnapshot(server, roomId, presence) {
+    const roomPresence = presence.rooms.get(roomId);
+    if (!roomPresence?.match) return;
+
+    for (const player of getRoomPresence(presence, roomId).players) {
+        const connection = presence.connections.get(player.userId);
+        const snapshot = matchSnapshot(roomId, presence, player.userId);
+        if (connection && snapshot) send(connection, 'match.snapshot', snapshot);
+    }
+}
+
 function broadcastRoomSnapshot(server, database, presence, roomId, requester, requestId) {
     const snapshot = roomSnapshot(database, presence, roomId);
     if (!snapshot) return;
@@ -873,6 +915,10 @@ function handleHello(socket, payload, requestId, server, database, presence, log
                     entries: buildRankingEntries(player.roomId, presence)
                 });
             }
+            if (match && !match.ended) {
+                const snapshot = matchSnapshot(player.roomId, presence, player.userId);
+                if (snapshot) send(socket, 'match.snapshot', snapshot);
+            }
             if (
                 match &&
                 !match.ended &&
@@ -1202,6 +1248,7 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
             }
         }
         broadcastRoomSnapshot(server, database, presence, room.id);
+        sendMatchSnapshot(server, room.id, presence);
         if (room.mode === 'deathmatch' && snapshot.participants.length === 1) {
             finishMatch({
                 roomId: room.id,

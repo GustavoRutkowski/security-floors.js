@@ -1338,6 +1338,82 @@ h1 {
     border-top: 1px solid var(--line);
 }
 
+.game-main {
+    display: grid;
+    flex: 1;
+    padding: 28px 0 22px;
+}
+
+.game-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    padding: 18px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+}
+
+.game-heading {
+    display: flex;
+    min-height: 54px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 2px 16px;
+}
+
+.game-heading h1 {
+    font-size: 13px;
+}
+
+.game-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 7px;
+}
+
+.game-stats strong {
+    color: var(--amber);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+.game-root {
+    position: relative;
+    min-height: min(68vh, 680px);
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid #53666a;
+    background: #172226;
+}
+
+.game-root canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+.game-footer {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 7px;
+}
+
+.game-footer > span:first-child {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .room-dialog {
     width: min(620px, calc(100% - 24px));
     padding: 0;
@@ -1729,6 +1805,44 @@ h1 {
     .lobby-panel,
     .room-dialog form {
         padding: 15px 12px;
+    }
+
+    .game-main {
+        padding-top: 18px;
+    }
+
+    .game-panel {
+        padding: 11px;
+    }
+
+    .game-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-bottom: 12px;
+    }
+
+    .game-heading h1 {
+        font-size: 10px;
+    }
+
+    .game-stats {
+        justify-content: flex-start;
+        font-size: 6px;
+    }
+
+    .game-stats strong {
+        font-size: 11px;
+    }
+
+    .game-root {
+        min-height: 60vh;
+    }
+
+    .game-footer {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        font-size: 6px;
     }
 
     .lobby-heading,

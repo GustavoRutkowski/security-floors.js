@@ -1,6 +1,7 @@
 import '@fontsource/press-start-2p';
 import './style.css';
 import { CHARACTERS, loadProfile, saveProfile } from './profile.js';
+import { createTopDownGame } from './game-scene.js';
 import { WebSocketClient } from './websocket-client.js';
 
 const profileScreen = document.getElementById('profile-screen');
@@ -18,10 +19,14 @@ const lobbyConfigForm = document.getElementById('lobby-config-form');
 const lobbyError = document.getElementById('lobby-error');
 const createRoomDialog = document.getElementById('create-room-dialog');
 const createRoomForm = document.getElementById('create-room-form');
+const gameScreen = document.getElementById('game-screen');
+const gameRoot = document.getElementById('game-root');
 let websocketClient;
 let roomPollingTimer;
 let selectedRoomId;
 let currentRoomSnapshot;
+let currentMatchSnapshot;
+let topDownGame;
 
 function getWebSocketUrl() {
     if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
@@ -165,6 +170,9 @@ function stopRoomPolling() {
 }
 
 function showLobby(snapshot) {
+    topDownGame?.destroy();
+    topDownGame = undefined;
+    currentMatchSnapshot = undefined;
     currentRoomSnapshot = snapshot;
     selectedRoomId = snapshot.room.room_id;
     stopRoomPolling();
@@ -175,7 +183,35 @@ function showLobby(snapshot) {
     updateLobby(snapshot);
 }
 
+function showGame(snapshot = currentMatchSnapshot) {
+    currentMatchSnapshot = snapshot;
+    stopRoomPolling();
+    profileScreen.hidden = true;
+    homeScreen.hidden = true;
+    lobbyScreen.hidden = true;
+    gameScreen.hidden = false;
+    document.documentElement.dataset.screen = 'game';
+    if (topDownGame) {
+        if (snapshot) topDownGame.applySnapshot(snapshot);
+        return;
+    }
+    const profile = loadProfile();
+    topDownGame = createTopDownGame({
+        root: gameRoot,
+        client: websocketClient,
+        profile,
+        snapshot,
+        onHudUpdate: ({ floor, status }) => {
+            document.getElementById('game-floor').textContent = String(floor).padStart(2, '0');
+            document.getElementById('game-player-status').textContent = status;
+        }
+    });
+}
+
 function showHome() {
+    topDownGame?.destroy();
+    topDownGame = undefined;
+    currentMatchSnapshot = undefined;
     currentRoomSnapshot = undefined;
     selectedRoomId = undefined;
     lobbyScreen.hidden = true;
@@ -304,7 +340,12 @@ function connectWebSocket(profile) {
         startRoomPolling();
     });
     websocketClient.addEventListener('room.snapshot', event => {
-        showLobby(event.detail.payload);
+        const snapshot = event.detail.payload;
+        if (snapshot.room.status === 'playing') {
+            currentRoomSnapshot = snapshot;
+            return;
+        }
+        showLobby(snapshot);
     });
     websocketClient.addEventListener('room.left', () => {
         showHome();
@@ -312,7 +353,34 @@ function connectWebSocket(profile) {
     });
     websocketClient.addEventListener('match.started', () => {
         document.getElementById('lobby-message').textContent = 'PARTIDA INICIADA';
+        showGame();
         window.dispatchEvent(new CustomEvent('security-floors:match-started'));
+    });
+    websocketClient.addEventListener('match.snapshot', event => {
+        showGame(event.detail.payload);
+    });
+    websocketClient.addEventListener('player.moved', event => {
+        const movement = event.detail.payload;
+        const player = currentMatchSnapshot?.players.find(
+            candidate => candidate.user_id === movement.user_id
+        );
+        const updatedPlayer = {
+            user_id: movement.user_id,
+            x: movement.x,
+            y: movement.y,
+            floor: player?.floor ?? 1,
+            status: player?.status ?? 'playing'
+        };
+        if (currentMatchSnapshot) {
+            const players = currentMatchSnapshot.players.filter(
+                candidate => candidate.user_id !== movement.user_id
+            );
+            currentMatchSnapshot = {
+                ...currentMatchSnapshot,
+                players: [...players, updatedPlayer]
+            };
+        }
+        topDownGame?.updateMovement(updatedPlayer);
     });
     websocketClient.addEventListener('spectator.started', event => {
         const target = event.detail.payload.target_user_id;

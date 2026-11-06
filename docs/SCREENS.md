@@ -34,6 +34,8 @@ Alterações de regras e de participantes são transmitidas imediatamente a todo
 Aqui é tudo o jogo em si, partida rolando, movimentação, mecânicas definidas e especificadas em outros documentos, etc...
 No fim da partida todos os players voltam para `RoomScreen`
 
+A cena usa um mapa top-down pixelado com câmera acompanhando o jogador local. O cliente envia somente intenções de direção em oito sentidos; posições, sequência aceita e jogadores visíveis são recebidos do servidor por `match.snapshot` e `player.moved`.
+
 Movimentos aceitos e mudanças no ranking são transmitidos imediatamente por `player.moved` e `ranking.updated`, respectivamente. O contrato completo está em `WEBSOCKET.md`.
 
 No mata-mata, um jogador eliminado fica invisível para os jogadores ativos e pode acompanhar o campo de visão de qualquer jogador ainda na partida. Não há entrada na sala com a finalidade de assistir.

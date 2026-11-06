@@ -40,7 +40,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-23** `feat: add the websocket client` — Implementar conexão, envio de intenções, validação básica dos eventos recebidos, estados de conexão e apresentação de erros/reconexão conforme `MVP-04`.
 - [x] **MVP-24** `feat: add the room browser screen` — Exibir salas disponíveis, permitir atualizar a lista e entrar em uma sala; mostrar feedback para sala cheia ou indisponível.
 - [x] **MVP-25** `feat: add the room lobby screen` — Exibir participantes e estado da sala, controles de owner, configuração da sala, saída e início da partida; suportar o fluxo de espectador.
-- [ ] **MVP-26** `feat: render the top-down game scene` — Criar o mapa e personagens provisórios pixelados, câmera e controles de movimento em oito direções, refletindo o estado recebido do servidor.
+- [x] **MVP-26** `feat: render the top-down game scene` — Criar o mapa e personagens provisórios pixelados, câmera e controles de movimento em oito direções, refletindo o estado recebido do servidor.
 - [ ] **MVP-27** `feat: add the question and notebook interface` — Exibir enunciado e alternativas, enviar apenas a escolha do jogador, mostrar feedback após avaliação e renderizar a ordem/número de caderno atribuído àquele jogador.
 - [ ] **MVP-28** `feat: add spectator and live ranking views` — Mostrar a partida e o ranking em tempo real para espectadores e jogadores sem conceder controles de jogo a espectadores.
 - [ ] **MVP-29** `feat: add game results and rematch flow` — Exibir resultado final, classificação e transição de volta ao lobby, incluindo o fluxo para o owner iniciar outra partida.
