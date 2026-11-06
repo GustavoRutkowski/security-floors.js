@@ -790,6 +790,147 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(match.timeoutTimer, null);
     });
 
+    it('broadcasts authoritative rankings with deterministic classic tie-breaks', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-live-ranking',
+            payload: {
+                name: 'Live ranking',
+                mode: 'classic',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-room-for-live-ranking',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+
+        const initialOwnerQuestion = waitForMessage(owner, 'question.presented');
+        const initialGuestQuestion = waitForMessage(guest, 'question.presented');
+        const initialOwnerRanking = waitForMessage(owner, 'ranking.updated');
+        const initialGuestRanking = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-room-for-live-ranking',
+            payload: {}
+        });
+        let ownerQuestion = (await initialOwnerQuestion).payload;
+        let guestQuestion = (await initialGuestQuestion).payload;
+        const initialRanking = (await initialOwnerRanking).payload;
+        assert.deepEqual((await initialGuestRanking).payload, initialRanking);
+        assert.equal(initialRanking.revision, 1);
+        assert.deepEqual(
+            initialRanking.entries.map(entry => entry.user_id),
+            [playerId, guestId]
+        );
+
+        const ownerQuestionTwo = waitForMessage(owner, 'question.presented');
+        const ownerRankingTwo = waitForMessage(owner, 'ranking.updated');
+        const guestRankingTwo = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'owner-reaches-floor-two',
+            payload: { question_id: ownerQuestion.question_id, option_index: 0 }
+        });
+        ownerQuestion = (await ownerQuestionTwo).payload;
+        const ownerAheadRanking = (await ownerRankingTwo).payload;
+        assert.deepEqual((await guestRankingTwo).payload, ownerAheadRanking);
+        assert.deepEqual(
+            ownerAheadRanking.entries.map(entry => entry.user_id),
+            [playerId, guestId]
+        );
+
+        const guestQuestionTwo = waitForMessage(guest, 'question.presented');
+        const ownerRankingThree = waitForMessage(owner, 'ranking.updated');
+        const guestRankingThree = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(guest, {
+            type: 'question.answer',
+            request_id: 'guest-reaches-floor-two',
+            payload: { question_id: guestQuestion.question_id, option_index: 0 }
+        });
+        guestQuestion = (await guestQuestionTwo).payload;
+        const tiedRanking = (await ownerRankingThree).payload;
+        assert.deepEqual((await guestRankingThree).payload, tiedRanking);
+        assert.equal(tiedRanking.revision, 3);
+        assert.deepEqual(
+            tiedRanking.entries.map(entry => entry.user_id),
+            [playerId, guestId]
+        );
+
+        const forgedScore = await sendRequest(owner, {
+            type: 'ranking.updated',
+            request_id: 'client-forged-ranking',
+            payload: { score: 1000, rank: 1 }
+        });
+        assert.equal(forgedScore.type, 'error');
+        assert.equal(forgedScore.payload.code, 'INVALID_MESSAGE');
+        assert.equal(server.presence.rooms.get(roomId).match.rankingRevision, 3);
+
+        const ownerQuestionThree = waitForMessage(owner, 'question.presented');
+        const ownerRankingFour = waitForMessage(owner, 'ranking.updated');
+        const guestRankingFour = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'owner-reaches-final-floor',
+            payload: { question_id: ownerQuestion.question_id, option_index: 0 }
+        });
+        ownerQuestion = (await ownerQuestionThree).payload;
+        const finalFloorRanking = (await ownerRankingFour).payload;
+        assert.deepEqual((await guestRankingFour).payload, finalFloorRanking);
+        assert.equal(finalFloorRanking.entries[0].user_id, playerId);
+
+        const ownerRankingFive = waitForMessage(owner, 'ranking.updated');
+        const guestRankingFive = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'owner-finishes-first',
+            payload: { question_id: ownerQuestion.question_id, option_index: 0 }
+        });
+        const ownerFinishedRanking = (await ownerRankingFive).payload;
+        assert.deepEqual((await guestRankingFive).payload, ownerFinishedRanking);
+        assert.equal(ownerFinishedRanking.entries[0].user_id, playerId);
+        assert.equal(ownerFinishedRanking.entries[0].status, 'finished');
+
+        const guestQuestionThree = waitForMessage(guest, 'question.presented');
+        const ownerRankingSix = waitForMessage(owner, 'ranking.updated');
+        const guestRankingSix = waitForMessage(guest, 'ranking.updated');
+        await sendRequest(guest, {
+            type: 'question.answer',
+            request_id: 'guest-reaches-final-floor',
+            payload: { question_id: guestQuestion.question_id, option_index: 0 }
+        });
+        guestQuestion = (await guestQuestionThree).payload;
+        assert.equal((await ownerRankingSix).payload.entries[0].user_id, playerId);
+        await guestRankingSix;
+
+        const ownerEnded = waitForMessage(owner, 'match.ended');
+        const guestEnded = waitForMessage(guest, 'match.ended');
+        await sendRequest(guest, {
+            type: 'question.answer',
+            request_id: 'guest-finishes-after-owner',
+            payload: { question_id: guestQuestion.question_id, option_index: 0 }
+        });
+        const ownerResult = await ownerEnded;
+        const guestResult = await guestEnded;
+        assert.deepEqual(
+            ownerResult.payload.entries.map(entry => entry.user_id),
+            [playerId, guestId]
+        );
+        assert.deepEqual(ownerResult, guestResult);
+    });
+
     it('synchronizes authoritative movement and rejects stale or malformed input', async () => {
         const owner = await connectClient();
         await hello(owner);
@@ -984,6 +1125,8 @@ describe('room creation and listing WebSocket events', () => {
 
         const ownerQuestionPromise = waitForMessage(owner, 'question.presented');
         const guestQuestionPromise = waitForMessage(guest, 'question.presented');
+        const ownerInitialRanking = waitForMessage(owner, 'ranking.updated');
+        const guestInitialRanking = waitForMessage(guest, 'ranking.updated');
         const eliminatedPromise = waitForMessage(guest, 'player.eliminated');
         const spectatorPromise = waitForMessage(owner, 'spectator.started');
         const ownerEndedPromise = waitForMessage(owner, 'match.ended');
@@ -995,7 +1138,10 @@ describe('room creation and listing WebSocket events', () => {
         });
         const ownerQuestion = (await ownerQuestionPromise).payload;
         await guestQuestionPromise;
+        assert.deepEqual((await ownerInitialRanking).payload, (await guestInitialRanking).payload);
 
+        const ownerEliminationRanking = waitForMessage(owner, 'ranking.updated');
+        const guestEliminationRanking = waitForMessage(guest, 'ranking.updated');
         const wrongAnswer = await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'deathmatch-wrong-answer',
@@ -1003,6 +1149,14 @@ describe('room creation and listing WebSocket events', () => {
         });
         const eliminated = await eliminatedPromise;
         const spectator = await spectatorPromise;
+        const ranking = (await ownerEliminationRanking).payload;
+        assert.deepEqual((await guestEliminationRanking).payload, ranking);
+        assert.deepEqual(
+            ranking.entries.map(entry => entry.user_id),
+            [guestId, playerId]
+        );
+        assert.equal(ranking.entries[0].status, 'playing');
+        assert.equal(ranking.entries[1].status, 'eliminated');
         const ownerEnded = await ownerEndedPromise;
         const guestEnded = await guestEndedPromise;
 
@@ -1416,11 +1570,17 @@ describe('room creation and listing WebSocket events', () => {
             payload: { room_id: roomId }
         });
         insertQuestions(5);
+        const ownerInitialRanking = waitForMessage(owner, 'ranking.updated');
+        const firstInitialRanking = waitForMessage(firstGuest, 'ranking.updated');
+        const secondInitialRanking = waitForMessage(secondGuest, 'ranking.updated');
         await sendRequest(owner, {
             type: 'match.start',
             request_id: 'start-room-for-spectator-movement',
             payload: {}
         });
+        const initialRanking = (await ownerInitialRanking).payload;
+        assert.deepEqual((await firstInitialRanking).payload, initialRanking);
+        assert.deepEqual((await secondInitialRanking).payload, initialRanking);
 
         const activeFollow = await sendRequest(owner, {
             type: 'spectator.follow',
@@ -1431,6 +1591,9 @@ describe('room creation and listing WebSocket events', () => {
 
         const eliminatedEvent = waitForMessage(owner, 'player.eliminated');
         const spectatorStarted = waitForMessage(firstGuest, 'spectator.started');
+        const ownerFirstEliminationRanking = waitForMessage(owner, 'ranking.updated');
+        const firstFirstEliminationRanking = waitForMessage(firstGuest, 'ranking.updated');
+        const secondFirstEliminationRanking = waitForMessage(secondGuest, 'ranking.updated');
         const converted = eliminatePlayer({
             database,
             presence: server.presence,
@@ -1440,6 +1603,13 @@ describe('room creation and listing WebSocket events', () => {
         assert.deepEqual(converted, { userId: firstGuestId, targetUserId: playerId });
         assert.equal((await eliminatedEvent).payload.user_id, firstGuestId);
         assert.equal((await spectatorStarted).payload.target_user_id, playerId);
+        const firstEliminationRanking = (await ownerFirstEliminationRanking).payload;
+        assert.deepEqual((await firstFirstEliminationRanking).payload, firstEliminationRanking);
+        assert.deepEqual((await secondFirstEliminationRanking).payload, firstEliminationRanking);
+        assert.deepEqual(
+            firstEliminationRanking.entries.map(entry => entry.user_id),
+            [playerId, secondGuestId, firstGuestId]
+        );
 
         const follow = await sendRequest(firstGuest, {
             type: 'spectator.follow',
@@ -1474,6 +1644,9 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(invalidFollow.payload.code, 'ACTION_NOT_ALLOWED');
 
         const retarget = waitForMessage(firstGuest, 'spectator.following');
+        const ownerSecondEliminationRanking = waitForMessage(owner, 'ranking.updated');
+        const firstSecondEliminationRanking = waitForMessage(firstGuest, 'ranking.updated');
+        const secondSecondEliminationRanking = waitForMessage(secondGuest, 'ranking.updated');
         const secondElimination = eliminatePlayer({
             database,
             presence: server.presence,
@@ -1482,6 +1655,13 @@ describe('room creation and listing WebSocket events', () => {
         });
         assert.deepEqual(secondElimination, { userId: secondGuestId, targetUserId: playerId });
         assert.equal((await retarget).payload.target_user_id, playerId);
+        const secondEliminationRanking = (await ownerSecondEliminationRanking).payload;
+        assert.deepEqual((await firstSecondEliminationRanking).payload, secondEliminationRanking);
+        assert.deepEqual((await secondSecondEliminationRanking).payload, secondEliminationRanking);
+        assert.deepEqual(
+            secondEliminationRanking.entries.map(entry => entry.user_id),
+            [playerId, secondGuestId, firstGuestId]
+        );
         assert.deepEqual(
             getPlayerViewers(server.presence, roomId, playerId).map(player => player.userId),
             [playerId, firstGuestId, secondGuestId]

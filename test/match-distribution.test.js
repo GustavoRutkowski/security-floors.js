@@ -89,9 +89,12 @@ describe('match question distribution', () => {
         assert.deepEqual(distribution.eliminationOrder, []);
         assert.deepEqual(distribution.progress.get('player-1'), {
             floor: 1,
+            floorReachedAt: null,
+            floorReachedOrder: 0,
             notebookIndex: 0,
             status: 'playing',
             finishedAt: null,
+            finishedOrder: null,
             doorOpensAt: null,
             doorTimer: null
         });

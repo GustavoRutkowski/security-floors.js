@@ -113,9 +113,12 @@ export function createMatchDistribution({
                 playerId,
                 {
                     floor: 1,
+                    floorReachedAt: null,
+                    floorReachedOrder: 0,
                     notebookIndex: 0,
                     status: 'playing',
                     finishedAt: null,
+                    finishedOrder: null,
                     doorOpensAt: null,
                     doorTimer: null
                 }
@@ -124,6 +127,8 @@ export function createMatchDistribution({
         startedAt: null,
         deadline: null,
         timeoutTimer: null,
+        progressionRevision: 0,
+        rankingRevision: 0,
         ended: false,
         endReason: null,
         winnerUserId: null,
