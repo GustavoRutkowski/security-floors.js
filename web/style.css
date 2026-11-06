@@ -1002,6 +1002,115 @@ h1 {
     font-size: 8px;
 }
 
+.room-browser {
+    display: flex;
+    min-height: 220px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px 0;
+}
+
+.room-browser-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.room-browser-heading .eyebrow {
+    margin-bottom: 10px;
+}
+
+.room-browser-heading h2 {
+    margin: 0;
+    color: var(--paper);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.8;
+}
+
+.room-refresh {
+    flex: 0 0 auto;
+}
+
+.room-refresh:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.rooms-status {
+    margin: 0;
+    color: var(--muted);
+    font-size: 7px;
+    line-height: 1.8;
+}
+
+.room-list {
+    display: grid;
+    gap: 8px;
+}
+
+.room-empty {
+    display: grid;
+    min-height: 92px;
+    place-items: center;
+    border: 1px dashed var(--line);
+    color: var(--muted);
+    font-size: 7px;
+    text-align: center;
+}
+
+.room-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--line);
+    background: var(--panel-raised);
+}
+
+.room-card:hover {
+    border-color: var(--cyan);
+}
+
+.room-card--selected {
+    border-color: var(--mint);
+    box-shadow: inset 3px 0 var(--mint);
+}
+
+.room-card-info {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+}
+
+.room-card-name {
+    overflow-wrap: anywhere;
+    color: var(--paper);
+    font-size: 8px;
+    line-height: 1.7;
+}
+
+.room-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 6px;
+    line-height: 1.8;
+}
+
+.room-card-meta strong {
+    color: var(--cyan);
+    font-weight: 400;
+}
+
+.room-card .secondary-button {
+    min-width: 98px;
+}
+
 .home-footer {
     min-height: 70px;
 }
@@ -1293,6 +1402,24 @@ h1 {
 
     .home-identity > div > span {
         font-size: 6px;
+    }
+
+    .room-browser-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .room-refresh {
+        width: 100%;
+    }
+
+    .room-card {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .room-card .secondary-button {
+        width: 100%;
     }
 
     .home-footer {

@@ -176,6 +176,27 @@
                     </div>
 
                     <div class="home-divider" aria-hidden="true"><span>///</span></div>
+                    <section class="room-browser" aria-labelledby="rooms-title">
+                        <div class="room-browser-heading">
+                            <div>
+                                <p class="eyebrow">REDE / SALAS DISPONÍVEIS</p>
+                                <h2 id="rooms-title">ESCOLHA UMA SALA</h2>
+                            </div>
+                            <button
+                                id="refresh-rooms"
+                                class="secondary-button room-refresh"
+                                type="button"
+                                aria-label="Atualizar salas"
+                            >
+                                ATUALIZAR
+                            </button>
+                        </div>
+                        <p id="rooms-status" class="rooms-status" role="status" aria-live="polite">
+                            AGUARDANDO CONEXÃO
+                        </p>
+                        <div id="room-list" class="room-list" aria-live="polite"></div>
+                        <p id="rooms-error" class="form-message" role="alert" hidden></p>
+                    </section>
                     <div class="home-footer">
                         <p class="home-status">
                             <span class="status-dot" aria-hidden="true"></span> PERFIL SALVO NESTE
