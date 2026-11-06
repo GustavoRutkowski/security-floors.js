@@ -12,6 +12,7 @@ import {
     getRoomPresence,
     joinRoomPresence,
     leaveRoomPresence,
+    returnMatchParticipantsToLobby,
     setPlayerSpectating,
     setSpectatorTarget
 } from './presence.js';
@@ -234,6 +235,7 @@ function finishMatch({ roomId, presence, winnerUserId = null, reason }) {
         const connection = presence.connections.get(player.userId);
         if (connection) send(connection, 'match.ended', { reason, entries });
     }
+    presence.onMatchEnded({ roomId, match });
     return true;
 }
 
@@ -307,6 +309,7 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         }
 
         if (room.status === 'playing' && room.mode === 'deathmatch') {
+            transferRoomOwner(database, presence, room, player.userId, true);
             if (match && !match.ended && player.status === 'active') {
                 eliminatePlayer({
                     database,
@@ -334,8 +337,7 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
                     });
                 }
             }
-            transferRoomOwner(database, presence, room, player.userId, true);
-            broadcastRoomSnapshot(server, database, presence, roomId);
+            if (!match?.ended) broadcastRoomSnapshot(server, database, presence, roomId);
             return;
         }
 
@@ -347,6 +349,22 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         }
     } catch (error) {
         logger.error('Failed to handle reconnect expiry:', error.message);
+    }
+}
+
+function handleMatchEnded({ roomId, match }, server, database, presence, logger) {
+    const room = database && listRooms(database).find(candidate => candidate.id === roomId);
+    const roomPresence = presence.rooms.get(roomId);
+    if (!room || room.status !== 'playing' || roomPresence?.match !== match || !match.ended) {
+        return;
+    }
+
+    try {
+        updateRoom(database, roomId, { status: 'waiting' });
+        returnMatchParticipantsToLobby(presence, roomId);
+        broadcastRoomSnapshot(server, database, presence, roomId);
+    } catch (error) {
+        logger.error('Failed to return completed match to the room:', error.message);
     }
 }
 
@@ -1231,6 +1249,15 @@ export function attachRoomProtocol(server, { database, presence, logger = consol
             logger.error('Reconnect expiry listener failed:', error.message);
         }
         handleReconnectExpired(event, server, database, presence, logger);
+    };
+    const previousMatchEndedHandler = presence.onMatchEnded;
+    presence.onMatchEnded = event => {
+        try {
+            previousMatchEndedHandler(event);
+        } catch (error) {
+            logger.error('Match ended listener failed:', error.message);
+        }
+        handleMatchEnded(event, server, database, presence, logger);
     };
     server.on('connection', socket =>
         attachSocketProtocol(socket, { server, database, presence, logger })

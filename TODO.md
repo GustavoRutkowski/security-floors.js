@@ -32,7 +32,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-18** `feat: implement deathmatch elimination` — Usar um caderno por andar, eliminar imediatamente quem errar e encerrar quando as questões terminarem, restar um jogador ou vencer o último desconectado.
 - [x] **MVP-19** `feat: implement match timers and termination` — Aplicar limite estrito ao deadline ou partida sem limite; encerrar por tempo/condição de vitória e cobrir corridas entre timeout e última resposta.
 - [x] **MVP-20** `feat: calculate and broadcast live rankings` — Priorizar quem alcança primeiro o andar final no clássico, aplicar desempates definidos em `RULES.md`, transmitir atualizações e não permitir que o cliente envie pontuação.
-- [ ] **MVP-21** `feat: return completed matches to the room` — Encerrar a sessão de jogo, retornar todos à sala, limpar estado transitório e permitir que o owner autorize uma nova partida.
+- [x] **MVP-21** `feat: return completed matches to the room` — Encerrar a sessão de jogo, retornar todos à sala, limpar estado transitório e permitir que o owner autorize uma nova partida.
 
 ## Cliente e telas
 

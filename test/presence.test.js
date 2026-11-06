@@ -10,6 +10,7 @@ import {
     getRoomPresence,
     joinRoomPresence,
     leaveRoomPresence,
+    returnMatchParticipantsToLobby,
     setPlayerSpectating,
     setSpectatorTarget
 } from '../ws/presence.js';
@@ -195,6 +196,29 @@ describe('authoritative room presence state', () => {
         assert.equal(spectator.status, 'spectating');
         assert.equal(spectator.targetUserId, null);
         assert.deepEqual(getRoomPresence(state, 'room-1').spectators, [spectator]);
+    });
+
+    it('returns match spectators to active lobby participants without losing membership', () => {
+        const state = createPresenceState();
+        createPresenceRoom(state, 'room-1', 'deathmatch');
+        for (const userId of ['player-1', 'player-2']) {
+            connect(state, userId);
+            joinRoomPresence(state, 'room-1', userId);
+        }
+        setPlayerSpectating(state, 'room-1', 'player-2', 'player-1');
+        state.rooms.get('room-1').match = { ended: true };
+
+        const returned = returnMatchParticipantsToLobby(state, 'room-1');
+
+        assert.deepEqual(
+            returned.players.map(player => player.status),
+            ['active', 'active']
+        );
+        assert.deepEqual(returned.spectators, []);
+        assert.deepEqual([...state.rooms.get('room-1').playerIds], ['player-1', 'player-2']);
+        assert.equal(state.rooms.get('room-1').match, null);
+        assert.equal(state.players.get('player-1').entryOrder, 1);
+        assert.equal(state.players.get('player-2').entryOrder, 2);
     });
 
     it('cleans room membership while keeping the connected user session', () => {

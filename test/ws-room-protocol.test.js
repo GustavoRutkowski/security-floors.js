@@ -50,7 +50,7 @@ function sendRequest(client, message) {
     });
 }
 
-function waitForMessage(client, type) {
+function waitForMessage(client, type, predicate = () => true) {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             client.off('message', onMessage);
@@ -59,7 +59,7 @@ function waitForMessage(client, type) {
 
         function onMessage(data) {
             const message = JSON.parse(data.toString('utf8'));
-            if (message.type !== type) return;
+            if (message.type !== type || !predicate(message.payload)) return;
             clearTimeout(timeout);
             client.off('message', onMessage);
             resolve(message);
@@ -609,6 +609,11 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(ended.payload.reason, 'time_limit_reached');
         assert.equal(match.ended, true);
         assert.equal(match.timeoutTimer, null);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
     });
 
     it('gives timeout priority over an answer processed at the exact deadline', async () => {
@@ -788,6 +793,11 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(ended.payload.entries[0].status, 'finished');
         assert.equal(match.ended, true);
         assert.equal(match.timeoutTimer, null);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
     });
 
     it('broadcasts authoritative rankings with deterministic classic tie-breaks', async () => {
@@ -1136,6 +1146,7 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'start-deathmatch-elimination',
             payload: {}
         });
+        const match = server.presence.rooms.get(roomId).match;
         const ownerQuestion = (await ownerQuestionPromise).payload;
         await guestQuestionPromise;
         assert.deepEqual((await ownerInitialRanking).payload, (await guestInitialRanking).payload);
@@ -1170,7 +1181,12 @@ describe('room creation and listing WebSocket events', () => {
             [guestId, playerId]
         );
         assert.deepEqual(ownerEnded, guestEnded);
-        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, guestId);
+        assert.equal(match.winnerUserId, guestId);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
 
         const afterEnd = await sendRequest(guest, {
             type: 'question.answer',
@@ -1224,6 +1240,7 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'start-deathmatch-question-end',
             payload: {}
         });
+        const match = server.presence.rooms.get(roomId).match;
         let question = (await questionPromise).payload;
 
         for (let floor = 1; floor <= 3; floor += 1) {
@@ -1246,7 +1263,8 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(ownerEnded.payload.reason, 'questions_exhausted');
         assert.equal(ownerEnded.payload.entries[0].user_id, playerId);
         assert.deepEqual(ownerEnded, guestEnded);
-        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, playerId);
+        assert.equal(match.winnerUserId, playerId);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
     });
 
     it('ends a single-player deathmatch immediately with that player as winner', async () => {
@@ -1277,7 +1295,100 @@ describe('room creation and listing WebSocket events', () => {
 
         assert.equal(ended.payload.reason, 'last_player_standing');
         assert.equal(ended.payload.entries[0].user_id, playerId);
-        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, playerId);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
+    });
+
+    it('returns everyone to the lobby and allows the owner to start a rematch', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-room-for-rematch',
+            payload: {
+                name: 'Rematch',
+                mode: 'deathmatch',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-room-for-rematch',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+
+        const ownerQuestionPromise = waitForMessage(owner, 'question.presented');
+        const guestQuestionPromise = waitForMessage(guest, 'question.presented');
+        const ownerEndedPromise = waitForMessage(owner, 'match.ended');
+        const guestEndedPromise = waitForMessage(guest, 'match.ended');
+        const ownerLobbyPromise = waitForMessage(
+            owner,
+            'room.snapshot',
+            payload => payload.room.status === 'waiting'
+        );
+        const guestLobbyPromise = waitForMessage(
+            guest,
+            'room.snapshot',
+            payload => payload.room.status === 'waiting'
+        );
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-first-rematch-match',
+            payload: {}
+        });
+        const firstOwnerQuestion = (await ownerQuestionPromise).payload;
+        await guestQuestionPromise;
+        const firstMatch = server.presence.rooms.get(roomId).match;
+
+        await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'owner-eliminated-before-rematch',
+            payload: { question_id: firstOwnerQuestion.question_id, option_index: 1 }
+        });
+        assert.equal((await ownerEndedPromise).payload.reason, 'last_player_standing');
+        assert.equal((await guestEndedPromise).payload.reason, 'last_player_standing');
+        const ownerLobby = await ownerLobbyPromise;
+        const guestLobby = await guestLobbyPromise;
+
+        assert.deepEqual(ownerLobby.payload, guestLobby.payload);
+        assert.equal(ownerLobby.payload.room.owner_id, playerId);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.deepEqual(server.presence.rooms.get(roomId).spectatorIds, new Set());
+        assert.equal(server.presence.players.get(playerId).status, 'active');
+        assert.equal(server.presence.players.get(playerId).targetUserId, null);
+        assert.equal(server.presence.players.get(guestId).status, 'active');
+
+        const rematchOwnerQuestion = waitForMessage(owner, 'question.presented');
+        const rematchGuestQuestion = waitForMessage(guest, 'question.presented');
+        const rematch = await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-second-rematch-match',
+            payload: {}
+        });
+        assert.equal(rematch.type, 'match.started');
+        await rematchOwnerQuestion;
+        await rematchGuestQuestion;
+        assert.notEqual(server.presence.rooms.get(roomId).match, firstMatch);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'playing'
+        );
     });
 
     it('declares the last expired deathmatch player the winner', async () => {
@@ -1310,6 +1421,7 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'start-deathmatch-last-disconnected',
             payload: {}
         });
+        const match = server.presence.rooms.get(roomId).match;
 
         const ownerSocket = server.presence.connections.get(playerId);
         const guestSocket = server.presence.connections.get(guestId);
@@ -1327,11 +1439,11 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(server.presence.rooms.get(roomId).match.ended, false);
         guestTimer.callback();
 
-        const match = server.presence.rooms.get(roomId).match;
         assert.equal(match.ended, true);
         assert.equal(match.endReason, 'last_player_disconnected');
         assert.equal(match.winnerUserId, guestId);
-        assert.equal(server.presence.players.get(guestId).status, 'spectating');
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(server.presence.players.get(guestId).status, 'active');
         assert.equal(server.presence.players.get(guestId).targetUserId, null);
     });
 
@@ -1477,7 +1589,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(server.presence.players.get(playerId).roomId, null);
     });
 
-    it('transfers an expired deathmatch owner without removing their match membership', async () => {
+    it('transfers an expired deathmatch owner and returns the match to the lobby', async () => {
         const owner = await connectClient();
         await hello(owner);
         const created = await sendRequest(owner, {
@@ -1510,6 +1622,7 @@ describe('room creation and listing WebSocket events', () => {
             payload: {}
         });
         await matchSnapshot;
+        const match = server.presence.rooms.get(roomId).match;
 
         const disconnectSnapshot = waitForMessage(guest, 'room.snapshot');
         const ownerSocket = server.presence.connections.get(playerId);
@@ -1523,6 +1636,7 @@ describe('room creation and listing WebSocket events', () => {
 
         const snapshot = await guestUpdate;
         assert.equal((await matchEnded).payload.reason, 'last_player_standing');
+        assert.equal(snapshot.payload.room.status, 'waiting');
         assert.equal(snapshot.payload.room.owner_id, guestId);
         assert.deepEqual(
             snapshot.payload.participants.map(participant => participant.user_id),
@@ -1530,8 +1644,14 @@ describe('room creation and listing WebSocket events', () => {
         );
         const disconnectedOwner = server.presence.players.get(playerId);
         assert.equal(disconnectedOwner.roomId, roomId);
-        assert.equal(disconnectedOwner.status, 'spectating');
-        assert.equal(disconnectedOwner.targetUserId, guestId);
+        assert.equal(disconnectedOwner.status, 'active');
+        assert.equal(disconnectedOwner.targetUserId, null);
+        assert.equal(match.ended, true);
+        assert.equal(server.presence.rooms.get(roomId).match, null);
+        assert.equal(
+            database.prepare('SELECT status FROM rooms WHERE id = ?').get(roomId).status,
+            'waiting'
+        );
         assert.equal(database.prepare('SELECT COUNT(*) AS count FROM rooms').get().count, 1);
     });
 

@@ -39,7 +39,8 @@ export function createPresenceState({
     setTimeoutFn = setTimeout,
     clearTimeoutFn = clearTimeout,
     nowFn = Date.now,
-    onReconnectExpired = () => {}
+    onReconnectExpired = () => {},
+    onMatchEnded = () => {}
 } = {}) {
     if (!Number.isSafeInteger(reconnectGraceMs) || reconnectGraceMs < 0) {
         throw new RangeError('reconnectGraceMs must be a non-negative integer');
@@ -55,7 +56,8 @@ export function createPresenceState({
         setTimeoutFn,
         clearTimeoutFn,
         nowFn,
-        onReconnectExpired
+        onReconnectExpired,
+        onMatchEnded
     };
 }
 
@@ -242,6 +244,24 @@ export function leaveRoomPresence(state, roomId, userId) {
         player: toPlayerSnapshot(player),
         roomEmpty: room.playerIds.size === 0
     };
+}
+
+export function returnMatchParticipantsToLobby(state, roomId) {
+    const room = getRoom(state, roomId);
+    if (!room.match) return null;
+    if (!room.match.ended) throw new Error('Match must be ended before returning to the lobby');
+
+    for (const userId of room.playerIds) {
+        const player = state.players.get(userId);
+        if (!player) continue;
+        player.status = 'active';
+        player.targetUserId = null;
+    }
+    room.spectatorIds.clear();
+    room.match = null;
+    room.revision += 1;
+
+    return getRoomPresence(state, roomId);
 }
 
 export function setPlayerSpectating(state, roomId, userId, targetUserId) {
