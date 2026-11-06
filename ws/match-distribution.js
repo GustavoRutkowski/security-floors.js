@@ -119,6 +119,10 @@ export function createMatchDistribution({
                     doorTimer: null
                 }
             ])
-        )
+        ),
+        ended: false,
+        endReason: null,
+        winnerUserId: null,
+        eliminationOrder: []
     };
 }

@@ -111,6 +111,55 @@ function transferRoomOwner(database, presence, room, departingUserId, connectedO
     return true;
 }
 
+function finishDeathmatch({ roomId, presence, winnerUserId = null, reason }) {
+    const roomPresence = presence.rooms.get(roomId);
+    const match = roomPresence?.match;
+    if (!match || match.mode !== 'deathmatch' || match.ended) return false;
+
+    match.ended = true;
+    match.endReason = reason;
+    match.winnerUserId = winnerUserId;
+    const winnerProgress = match.progress.get(winnerUserId);
+    if (winnerProgress) winnerProgress.status = 'finished';
+
+    const players = getRoomPresence(presence, roomId).players;
+    const playersById = new Map(players.map(player => [player.userId, player]));
+    const orderedIds = [];
+    const addPlayer = userId => {
+        if (playersById.has(userId) && !orderedIds.includes(userId)) orderedIds.push(userId);
+    };
+
+    addPlayer(winnerUserId);
+    for (const player of players) {
+        if (player.status === 'active') addPlayer(player.userId);
+    }
+    for (const userId of [...match.eliminationOrder].reverse()) addPlayer(userId);
+    for (const player of players) addPlayer(player.userId);
+
+    const entries = orderedIds.map((userId, index) => {
+        const player = playersById.get(userId);
+        const progress = match.progress.get(userId);
+        return {
+            rank: index + 1,
+            user_id: userId,
+            nickname: player.nickname,
+            floor: Math.min(progress.floor, match.floors.length),
+            status:
+                userId === winnerUserId || progress.status === 'finished'
+                    ? 'finished'
+                    : player.status === 'active'
+                      ? 'playing'
+                      : 'eliminated'
+        };
+    });
+
+    for (const player of players) {
+        const connection = presence.connections.get(player.userId);
+        if (connection) send(connection, 'match.ended', { reason, entries });
+    }
+    return true;
+}
+
 function removeRoomParticipant(database, presence, roomId, userId, connectedOnlyForHandoff) {
     const roomPresence = presence.rooms.get(roomId);
     if (!roomPresence || !roomPresence.playerIds.has(userId)) return null;
@@ -136,13 +185,34 @@ function handleReconnectExpired({ player, roomId }, server, database, presence, 
         if (!room) return;
 
         if (room.status === 'playing' && room.mode === 'deathmatch') {
-            eliminatePlayer({
-                database,
-                presence,
-                roomId,
-                userId: player.userId,
-                reason: 'reconnect_expired'
-            });
+            const match = presence.rooms.get(roomId)?.match;
+            if (match && !match.ended && player.status === 'active') {
+                eliminatePlayer({
+                    database,
+                    presence,
+                    roomId,
+                    userId: player.userId,
+                    reason: 'reconnect_expired'
+                });
+                const activePlayers = getRoomPresence(presence, roomId).players.filter(
+                    candidate => candidate.status === 'active'
+                );
+                if (activePlayers.length === 0) {
+                    finishDeathmatch({
+                        roomId,
+                        presence,
+                        winnerUserId: player.userId,
+                        reason: 'last_player_disconnected'
+                    });
+                } else if (activePlayers.length === 1 && activePlayers[0].connected) {
+                    finishDeathmatch({
+                        roomId,
+                        presence,
+                        winnerUserId: activePlayers[0].userId,
+                        reason: 'last_player_standing'
+                    });
+                }
+            }
             transferRoomOwner(database, presence, room, player.userId, true);
             broadcastRoomSnapshot(server, database, presence, roomId);
             return;
@@ -163,11 +233,13 @@ export function eliminatePlayer({ database, presence, roomId, userId, reason = '
     const room = database && listRooms(database).find(candidate => candidate.id === roomId);
     const roomPresence = presence.rooms.get(roomId);
     const player = presence.players.get(userId);
+    const match = roomPresence?.match;
     if (
         !room ||
         room.status !== 'playing' ||
         room.mode !== 'deathmatch' ||
         !roomPresence ||
+        match?.ended ||
         !player ||
         player.status !== 'active'
     ) {
@@ -189,6 +261,10 @@ export function eliminatePlayer({ database, presence, roomId, userId, reason = '
         }
         throw error;
     }
+
+    if (!match.eliminationOrder.includes(userId)) match.eliminationOrder.push(userId);
+    const progress = match.progress.get(userId);
+    if (progress) progress.status = 'eliminated';
 
     for (const activePlayer of getRoomPresence(presence, roomId).players) {
         if (activePlayer.status !== 'active') continue;
@@ -297,13 +373,8 @@ function handlePlayerMove(socket, payload, requestId, presence) {
     const roomPresence = presence.rooms.get(player.roomId);
     const match = roomPresence?.match;
     const movement = match?.movement.get(socket.userId);
-    if (!movement) {
-        sendError(
-            socket,
-            'ACTION_NOT_ALLOWED',
-            'A partida ainda não está em andamento.',
-            requestId
-        );
+    if (!movement || match.ended) {
+        sendError(socket, 'ACTION_NOT_ALLOWED', 'A partida não está em andamento.', requestId);
         return;
     }
     if (payload.sequence <= movement.sequence) {
@@ -422,7 +493,13 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
     const room = database && listRooms(database).find(candidate => candidate.id === player.roomId);
     const match = presence.rooms.get(player.roomId)?.match;
     const progress = match?.progress.get(socket.userId);
-    if (room?.status !== 'playing' || room.mode !== 'classic' || !match || !progress) {
+    if (
+        room?.status !== 'playing' ||
+        !['classic', 'deathmatch'].includes(room.mode) ||
+        !match ||
+        match.ended ||
+        !progress
+    ) {
         sendError(
             socket,
             'ACTION_NOT_ALLOWED',
@@ -468,6 +545,54 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
         explanation: question.explanation,
         floor: progress.floor
     };
+
+    if (room.mode === 'deathmatch') {
+        if (correct) {
+            progress.floor += 1;
+            progress.notebookIndex = 0;
+            if (progress.floor > match.players.get(socket.userId).length) {
+                progress.status = 'finished';
+                send(socket, 'answer.result', result, requestId);
+                finishDeathmatch({
+                    roomId: player.roomId,
+                    presence,
+                    winnerUserId: socket.userId,
+                    reason: 'questions_exhausted'
+                });
+            } else {
+                send(socket, 'answer.result', result, requestId);
+                sendCurrentQuestion(socket, match, socket.userId, progress);
+            }
+            return;
+        }
+
+        send(socket, 'answer.result', result, requestId);
+        eliminatePlayer({
+            database,
+            presence,
+            roomId: player.roomId,
+            userId: socket.userId,
+            reason: 'wrong_answer'
+        });
+        const activePlayers = getRoomPresence(presence, player.roomId).players.filter(
+            candidate => candidate.status === 'active'
+        );
+        if (activePlayers.length === 1 && activePlayers[0].connected) {
+            finishDeathmatch({
+                roomId: player.roomId,
+                presence,
+                winnerUserId: activePlayers[0].userId,
+                reason: 'last_player_standing'
+            });
+        } else if (activePlayers.length === 0) {
+            finishDeathmatch({
+                roomId: player.roomId,
+                presence,
+                reason: 'no_players_remaining'
+            });
+        }
+        return;
+    }
 
     if (correct) {
         progress.floor += 1;
@@ -556,6 +681,29 @@ function handleHello(socket, payload, requestId, server, database, presence, log
 
         if ((resumed || replacedConnection) && player.roomId && database) {
             broadcastRoomSnapshot(server, database, presence, player.roomId, socket);
+            const match = presence.rooms.get(player.roomId)?.match;
+            const progress = match?.progress.get(player.userId);
+            if (match?.mode === 'deathmatch' && !match.ended) {
+                const activePlayers = getRoomPresence(presence, player.roomId).players.filter(
+                    participant => participant.status === 'active'
+                );
+                if (activePlayers.length === 1 && activePlayers[0].connected) {
+                    finishDeathmatch({
+                        roomId: player.roomId,
+                        presence,
+                        winnerUserId: activePlayers[0].userId,
+                        reason: 'last_player_standing'
+                    });
+                }
+            }
+            if (
+                match &&
+                !match.ended &&
+                player.status === 'active' &&
+                progress?.status === 'playing'
+            ) {
+                sendCurrentQuestion(socket, match, player.userId, progress);
+            }
         }
     } catch (error) {
         logger.error('Failed to establish WebSocket session:', error.message);
@@ -867,7 +1015,14 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
             }
         }
         broadcastRoomSnapshot(server, database, presence, room.id);
-        if (room.mode === 'classic') {
+        if (room.mode === 'deathmatch' && snapshot.participants.length === 1) {
+            finishDeathmatch({
+                roomId: room.id,
+                presence,
+                winnerUserId: snapshot.participants[0].user_id,
+                reason: 'last_player_standing'
+            });
+        } else {
             for (const participant of snapshot.participants) {
                 const connection = presence.connections.get(participant.user_id);
                 const progress = matchDistribution.progress.get(participant.user_id);

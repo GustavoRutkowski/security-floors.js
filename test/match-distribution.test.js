@@ -83,6 +83,17 @@ describe('match question distribution', () => {
             new Set(distribution.floors.map(floor => floor.notebooks[0].questionId)).size,
             3
         );
+        assert.equal(distribution.ended, false);
+        assert.equal(distribution.endReason, null);
+        assert.equal(distribution.winnerUserId, null);
+        assert.deepEqual(distribution.eliminationOrder, []);
+        assert.deepEqual(distribution.progress.get('player-1'), {
+            floor: 1,
+            notebookIndex: 0,
+            status: 'playing',
+            doorOpensAt: null,
+            doorTimer: null
+        });
     });
 
     it('rejects a catalog without enough distinct questions', () => {

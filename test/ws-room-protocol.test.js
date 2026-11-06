@@ -730,6 +730,232 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(floorThreeQuestion.floor, 3);
     });
 
+    it('eliminates deathmatch players on a wrong answer and ends for the last standing', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-deathmatch-elimination',
+            payload: {
+                name: 'Deathmatch elimination',
+                mode: 'deathmatch',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-deathmatch-elimination',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+
+        const ownerQuestionPromise = waitForMessage(owner, 'question.presented');
+        const guestQuestionPromise = waitForMessage(guest, 'question.presented');
+        const eliminatedPromise = waitForMessage(guest, 'player.eliminated');
+        const spectatorPromise = waitForMessage(owner, 'spectator.started');
+        const ownerEndedPromise = waitForMessage(owner, 'match.ended');
+        const guestEndedPromise = waitForMessage(guest, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-deathmatch-elimination',
+            payload: {}
+        });
+        const ownerQuestion = (await ownerQuestionPromise).payload;
+        await guestQuestionPromise;
+
+        const wrongAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'deathmatch-wrong-answer',
+            payload: { question_id: ownerQuestion.question_id, option_index: 1 }
+        });
+        const eliminated = await eliminatedPromise;
+        const spectator = await spectatorPromise;
+        const ownerEnded = await ownerEndedPromise;
+        const guestEnded = await guestEndedPromise;
+
+        assert.equal(wrongAnswer.payload.correct, false);
+        assert.equal(eliminated.payload.user_id, playerId);
+        assert.equal(eliminated.payload.reason, 'wrong_answer');
+        assert.equal(spectator.payload.target_user_id, guestId);
+        assert.equal(ownerEnded.payload.reason, 'last_player_standing');
+        assert.deepEqual(
+            ownerEnded.payload.entries.slice(0, 2).map(entry => entry.user_id),
+            [guestId, playerId]
+        );
+        assert.deepEqual(ownerEnded, guestEnded);
+        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, guestId);
+
+        const afterEnd = await sendRequest(guest, {
+            type: 'question.answer',
+            request_id: 'deathmatch-answer-after-end',
+            payload: {
+                question_id: (await guestQuestionPromise).payload.question_id,
+                option_index: 0
+            }
+        });
+        assert.equal(afterEnd.payload.code, 'ACTION_NOT_ALLOWED');
+
+        const movementAfterEnd = await sendRequest(guest, {
+            type: 'player.move',
+            request_id: 'deathmatch-movement-after-end',
+            payload: { sequence: 0, direction: 'east' }
+        });
+        assert.equal(movementAfterEnd.payload.code, 'ACTION_NOT_ALLOWED');
+    });
+
+    it('ends a deathmatch when a player answers the final floor correctly', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-deathmatch-question-end',
+            payload: {
+                name: 'Deathmatch questions',
+                mode: 'deathmatch',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-deathmatch-question-end',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+
+        const questionPromise = waitForMessage(owner, 'question.presented');
+        const ownerEndedPromise = waitForMessage(owner, 'match.ended');
+        const guestEndedPromise = waitForMessage(guest, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-deathmatch-question-end',
+            payload: {}
+        });
+        let question = (await questionPromise).payload;
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(owner, 'question.presented') : null;
+            const answer = await sendRequest(owner, {
+                type: 'question.answer',
+                request_id: `deathmatch-correct-${floor}`,
+                payload: { question_id: question.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) {
+                question = (await nextQuestionPromise).payload;
+                assert.equal(question.floor, floor + 1);
+            }
+        }
+
+        const ownerEnded = await ownerEndedPromise;
+        const guestEnded = await guestEndedPromise;
+        assert.equal(ownerEnded.payload.reason, 'questions_exhausted');
+        assert.equal(ownerEnded.payload.entries[0].user_id, playerId);
+        assert.deepEqual(ownerEnded, guestEnded);
+        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, playerId);
+    });
+
+    it('ends a single-player deathmatch immediately with that player as winner', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-solo-deathmatch',
+            payload: {
+                name: 'Solo deathmatch',
+                mode: 'deathmatch',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 1
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        insertQuestions(3);
+
+        const endedPromise = waitForMessage(owner, 'match.ended');
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-solo-deathmatch',
+            payload: {}
+        });
+        const ended = await endedPromise;
+
+        assert.equal(ended.payload.reason, 'last_player_standing');
+        assert.equal(ended.payload.entries[0].user_id, playerId);
+        assert.equal(server.presence.rooms.get(roomId).match.winnerUserId, playerId);
+    });
+
+    it('declares the last expired deathmatch player the winner', async () => {
+        const owner = await connectClient();
+        await hello(owner);
+        const created = await sendRequest(owner, {
+            type: 'room.create',
+            request_id: 'create-deathmatch-last-disconnected',
+            payload: {
+                name: 'Last disconnected',
+                mode: 'deathmatch',
+                floors: 3,
+                notebooks_per_floor: 1,
+                time_limit_seconds: null,
+                max_players: 2
+            }
+        });
+        const roomId = created.payload.room.room_id;
+        const guest = await connectClient();
+        const guestId = '22222222-2222-4222-8222-222222222222';
+        await hello(guest, guestId);
+        await sendRequest(guest, {
+            type: 'room.join',
+            request_id: 'join-deathmatch-last-disconnected',
+            payload: { room_id: roomId }
+        });
+        insertQuestions(3);
+        await sendRequest(owner, {
+            type: 'match.start',
+            request_id: 'start-deathmatch-last-disconnected',
+            payload: {}
+        });
+
+        const ownerSocket = server.presence.connections.get(playerId);
+        const guestSocket = server.presence.connections.get(guestId);
+        const ownerClosed = once(ownerSocket, 'close');
+        owner.close();
+        await ownerClosed;
+        const guestClosed = once(guestSocket, 'close');
+        guest.close();
+        await guestClosed;
+        const [ownerTimer, guestTimer] = disconnectTimers.filter(
+            timer => timer.delay === 30_000 && !timer.cleared
+        );
+
+        ownerTimer.callback();
+        assert.equal(server.presence.rooms.get(roomId).match.ended, false);
+        guestTimer.callback();
+
+        const match = server.presence.rooms.get(roomId).match;
+        assert.equal(match.ended, true);
+        assert.equal(match.endReason, 'last_player_disconnected');
+        assert.equal(match.winnerUserId, guestId);
+        assert.equal(server.presence.players.get(guestId).status, 'spectating');
+        assert.equal(server.presence.players.get(guestId).targetUserId, null);
+    });
+
     it('transfers ownership on leave and deletes the room after its final player leaves', async () => {
         const owner = await connectClient();
         await hello(owner);
@@ -913,9 +1139,11 @@ describe('room creation and listing WebSocket events', () => {
         await ownerSocketClosed;
         await disconnectSnapshot;
         const guestUpdate = waitForMessage(guest, 'room.snapshot');
+        const matchEnded = waitForMessage(guest, 'match.ended');
         disconnectTimers.find(timer => !timer.cleared).callback();
 
         const snapshot = await guestUpdate;
+        assert.equal((await matchEnded).payload.reason, 'last_player_standing');
         assert.equal(snapshot.payload.room.owner_id, guestId);
         assert.deepEqual(
             snapshot.payload.participants.map(participant => participant.user_id),

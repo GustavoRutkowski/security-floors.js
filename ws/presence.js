@@ -257,14 +257,16 @@ export function setPlayerSpectating(state, roomId, userId, targetUserId) {
         .filter(candidate => candidate.status === 'active' && candidate.userId !== userId);
     const target = targetUserId
         ? activePlayers.find(candidate => candidate.userId === targetUserId)
-        : activePlayers[0];
+        : (activePlayers[0] ?? null);
 
-    if (!target) throw new Error('Spectator target must be an active player in the room');
+    if (targetUserId && !target) {
+        throw new Error('Spectator target must be an active player in the room');
+    }
 
     player.status = 'spectating';
-    player.targetUserId = target.userId;
+    player.targetUserId = target?.userId ?? null;
     room.spectatorIds.add(userId);
-    retargetSpectators(state, room, userId, target.userId);
+    retargetSpectators(state, room, userId, target?.userId ?? null);
     room.revision += 1;
     return toPlayerSnapshot(player);
 }

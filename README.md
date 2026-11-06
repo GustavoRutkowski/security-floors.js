@@ -26,7 +26,7 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 ## Modos de Jogo
 
 - Clássico (regras já descritas)
-- Mata-Mata --> Existe apenas um caderno por andar, quem acertar segue jogando, quem errar é eliminado instantaneamente. Vence aquele que se manter vivo até que o número de questões chegue ao fim ou que não sobrem mais adversários.
+- Mata-Mata --> Existe apenas um caderno por andar. Quem errar é eliminado instantaneamente; vence quem responder corretamente todas as questões ou permanecer como último jogador ativo. Se todos os concorrentes restantes expirarem a tolerância de reconexão, o último a expirar vence por ausência de adversários.
 
 ## Estrutura de Pastas:
 

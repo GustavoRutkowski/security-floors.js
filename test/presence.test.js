@@ -184,6 +184,19 @@ describe('authoritative room presence state', () => {
         );
     });
 
+    it('allows the last eliminated deathmatch player to have no spectator target', () => {
+        const state = createPresenceState();
+        createPresenceRoom(state, 'room-1', 'deathmatch');
+        connect(state, 'player-1');
+        joinRoomPresence(state, 'room-1', 'player-1');
+
+        const spectator = setPlayerSpectating(state, 'room-1', 'player-1');
+
+        assert.equal(spectator.status, 'spectating');
+        assert.equal(spectator.targetUserId, null);
+        assert.deepEqual(getRoomPresence(state, 'room-1').spectators, [spectator]);
+    });
+
     it('cleans room membership while keeping the connected user session', () => {
         const state = createPresenceState();
         createPresenceRoom(state, 'room-1');

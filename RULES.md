@@ -16,7 +16,7 @@
 
 - O servidor WebSocket valida acoes e e a autoridade para o estado compartilhado e o ranking.
 - No classico, o servidor apresenta ao jogador os cadernos do andar na ordem individual sorteada para ele. Uma resposta correta em qualquer caderno avanca imediatamente um andar. Cada caderno so pode ser respondido uma vez por andar; se todas as respostas estiverem erradas, o jogador aguarda 5 segundos e entao avanca automaticamente quando a porta abre.
-- No mata-mata, errar elimina o jogador. A partida termina quando as questoes acabam ou resta um jogador.
+- No mata-mata, cada andar tem exatamente um caderno. Errar elimina imediatamente o jogador e o converte em espectador. Acertar no ultimo andar encerra a partida com esse jogador como vencedor (`questions_exhausted`); eliminar um jogador e deixar exatamente um competidor ativo e conectado encerra com esse sobrevivente como vencedor (`last_player_standing`). Uma partida iniciada com um unico participante termina imediatamente com ele como vencedor. Se a expiracao de reconexao eliminar o ultimo competidor ativo, o jogador que acabou de expirar vence por ausencia de adversarios (`last_player_disconnected`). Se todos forem eliminados por resposta incorreta, a partida termina sem vencedor (`no_players_remaining`).
 - O ranking classico prioriza quem alcanca primeiro o andar final.
 - Questões sao de multipla escolha; verdadeiro/falso e representado por duas alternativas. A resposta correta e armazenada como indice baseado em zero.
 - Questões contem somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`; nao armazenam modo, andar ou caderno.
@@ -30,7 +30,7 @@
 - Uma desconexao reserva por 30 segundos a vaga e o estado do jogador na sala/partida. Durante esse prazo, o jogador nao pode enviar acoes; a partida e o cronometro continuam normalmente.
 - O cliente pode retomar a sessao enviando `session.hello` com o mesmo UUID dentro dos 30 segundos. O servidor reassocia a conexao e envia snapshots atuais da sala e, se aplicavel, da partida. A nova conexao substitui a anterior para aquele UUID.
 - Se o prazo expirar no lobby ou no modo classico, a desconexao e tratada como saida da sala: remove-se a presenca e atualiza-se a sala normalmente.
-- No mata-mata, se o jogador nao voltar em 30 segundos, ele e eliminado por desconexao e passa ao modo espectador ate o fim da partida. Se a expiracao deixar a partida sem nenhum outro competidor ativo, esse ultimo jogador a desconectar vence por ausencia de adversarios.
+- No mata-mata, se o jogador nao voltar em 30 segundos, ele e eliminado por desconexao e passa ao modo espectador ate o fim da partida. Se a expiracao deixar a partida sem nenhum outro competidor ativo, esse ultimo jogador a desconectar vence por ausencia de adversarios e pode ficar sem alvo de espectador.
 
 ### Owner desconectado durante a partida
 
