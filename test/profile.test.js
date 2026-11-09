@@ -47,7 +47,10 @@ describe('local player profile', () => {
         assert.deepEqual(loadProfile(storage), firstProfile);
 
         const updatedProfile = saveProfile(
-            { nickname: 'Ana L.', character_id: CHARACTERS[2].id },
+            {
+                nickname: 'Ana L.',
+                character_id: CHARACTERS.find(character => character.id === 'tubarina').id
+            },
             storage
         );
         assert.equal(updatedProfile.user_id, firstProfile.user_id);

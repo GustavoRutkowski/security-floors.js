@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import { CHARACTERS } from './profile.js';
 
 const WORLD_SIZE = 800;
 const LOGICAL_MAP_SIZE = 100;
 const MOVE_INTERVAL_MS = 85;
-const CHARACTER_IDS = ['bobabao', 'lixaredo', 'tubarina'];
+const CHARACTER_IDS = CHARACTERS.map(character => character.id);
 const TILE_SIZE = 32;
 const MAP_SIZE = 25;
 const TILESET_KEY = 'tileset';
@@ -169,8 +170,8 @@ class TopDownScene extends Phaser.Scene {
             frameWidth: 16,
             frameHeight: 16
         });
-        for (const characterId of CHARACTER_IDS) {
-            this.load.spritesheet(characterId, `/spritesheets/${characterId}.png`, {
+        for (const character of CHARACTERS) {
+            this.load.spritesheet(character.id, `/spritesheets/${character.sprite}`, {
                 frameWidth: 16,
                 frameHeight: 16
             });
@@ -372,7 +373,7 @@ export function createTopDownGame({ root, client, profile, snapshot, room, onHud
         pixelArt: true,
         backgroundColor: '#172226',
         scale: {
-            mode: Phaser.Scale.RESIZE,
+            mode: Phaser.Scale.FIT,
             autoCenter: Phaser.Scale.CENTER_BOTH
         },
         input: {

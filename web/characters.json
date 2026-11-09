@@ -1,0 +1,25 @@
+[
+    { "id": "bobabao", "name": "BOBABAO", "sprite": "bobabao.png" },
+    { "id": "carlos", "name": "CARLOS", "sprite": "carlos.png" },
+    { "id": "dr.vultu", "name": "DR. VULTU", "sprite": "dr.vultu.png" },
+    { "id": "eteubaldo", "name": "ETEUBALDO", "sprite": "eteubaldo.png" },
+    { "id": "lixaredo", "name": "LIXAREDO", "sprite": "lixaredo.png" },
+    { "id": "nefasto", "name": "NEFASTO", "sprite": "nefasto.png" },
+    { "id": "plantosca", "name": "PLANTOSCA", "sprite": "plantosca.png" },
+    {
+        "id": "resmungossauro",
+        "name": "RESMUNGOSSAURO",
+        "sprite": "resmungossauro.png"
+    },
+    { "id": "rinocornio", "name": "RINOCORNIO", "sprite": "rinocornio.png" },
+    { "id": "robotudo", "name": "ROBOTUDO", "sprite": "robotudo.png" },
+    { "id": "tubarina", "name": "TUBARINA", "sprite": "tubarina.png" },
+    {
+        "id": "verme_d._goma",
+        "name": "VERNE D. GOMA",
+        "sprite": "verme_d._goma.png"
+    },
+    { "id": "zoiuda", "name": "ZOIUDA", "sprite": "zoiuda.png" },
+    { "id": "gatol", "name": "GATOL", "sprite": "gatol.png" },
+    { "id": "leria", "name": "LERIA", "sprite": "leria.png" }
+]
