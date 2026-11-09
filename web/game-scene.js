@@ -4,6 +4,120 @@ const WORLD_SIZE = 800;
 const LOGICAL_MAP_SIZE = 100;
 const MOVE_INTERVAL_MS = 85;
 const CHARACTER_IDS = ['bobabao', 'lixaredo', 'tubarina'];
+const TILE_SIZE = 32;
+const MAP_SIZE = 25;
+const TILESET_KEY = 'tileset';
+const TILESET_URL = '/spritesheets/TILESET.png';
+const MAPS = {
+    1: [
+        '1111111111122211111111111',
+        '1111111111122211111111111',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000033333333300000000',
+        '0000000033333333300000000',
+        '0000000033000003300000000',
+        '0000000033000003300000000',
+        '0000000033004003300000000',
+        '0000000033000003300000000',
+        '0000000033000003300000000',
+        '0000000033333333300000000',
+        '0000000033333333300000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000'
+    ],
+    2: [
+        '1111111111122211111111111',
+        '1111111111122211111111111',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000040000333330000400000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000'
+    ],
+    3: [
+        '1111111111122211111111111',
+        '1111111111122211111111111',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000004000000000004000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000004000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000'
+    ],
+    4: [
+        '1111111111122211111111111',
+        '1111111111122211111111111',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000400000000040000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000333330000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000400000000040000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000',
+        '0000000000000000000000000'
+    ]
+};
 
 function logicalToWorld(value) {
     return (value / LOGICAL_MAP_SIZE) * WORLD_SIZE;
@@ -40,15 +154,21 @@ class TopDownScene extends Phaser.Scene {
         this.ready = false;
         this.pendingMovements = new Map();
         this.onHudUpdate = onHudUpdate;
+        this.notebooksPerFloor = 1;
     }
 
     init(data) {
         this.client = data.client;
         this.profile = data.profile;
         this.latestSnapshot = data.snapshot;
+        this.notebooksPerFloor = data.room?.notebooks_per_floor ?? 1;
     }
 
     preload() {
+        this.load.spritesheet(TILESET_KEY, TILESET_URL, {
+            frameWidth: 16,
+            frameHeight: 16
+        });
         for (const characterId of CHARACTER_IDS) {
             this.load.spritesheet(characterId, `/spritesheets/${characterId}.png`, {
                 frameWidth: 16,
@@ -78,23 +198,36 @@ class TopDownScene extends Phaser.Scene {
     }
 
     createMap() {
-        const background = this.add.graphics();
-        background.fillStyle(0x172226, 1);
-        background.fillRect(0, 0, WORLD_SIZE, WORLD_SIZE);
-        background.lineStyle(1, 0x2d4142, 0.7);
-        for (let position = 0; position <= WORLD_SIZE; position += 40) {
-            background.lineBetween(position, 0, position, WORLD_SIZE);
-            background.lineBetween(0, position, WORLD_SIZE, position);
+        const map = MAPS[this.notebooksPerFloor] || MAPS[1];
+        for (let row = 0; row < MAP_SIZE; row += 1) {
+            for (let column = 0; column < MAP_SIZE; column += 1) {
+                const code = map[row][column];
+                this.addTile(column, row, 0);
+                if (code === '1') this.addTile(column, row, 1);
+                if (code === '4') this.addTile(column, row, 2);
+            }
         }
-        background.lineStyle(4, 0x78bfc0, 0.85);
-        background.strokeRect(2, 2, WORLD_SIZE - 4, WORLD_SIZE - 4);
-        const center = this.add.rectangle(WORLD_SIZE / 2, WORLD_SIZE / 2, 150, 150, 0x202e32, 0.75);
-        center.setStrokeStyle(2, 0x405155, 1);
-        this.add.text(18, 14, 'FLOOR / LIVE MAP', {
-            color: '#91a29c',
-            fontFamily: 'Press Start 2P',
-            fontSize: '10px'
-        });
+
+        const doorColumn = map[0].indexOf('2');
+        if (doorColumn >= 0) {
+            for (let row = 0; row < 2; row += 1) {
+                for (let column = 0; column < 3; column += 1) {
+                    this.addTile(doorColumn + column, row, 3 + row * 3 + column, 2);
+                }
+            }
+        }
+    }
+
+    addTile(column, row, frame, depth = 0) {
+        return this.add
+            .image(
+                column * TILE_SIZE + TILE_SIZE / 2,
+                row * TILE_SIZE + TILE_SIZE / 2,
+                TILESET_KEY,
+                frame
+            )
+            .setScale(2)
+            .setDepth(depth);
     }
 
     createAnimations() {
@@ -148,7 +281,7 @@ class TopDownScene extends Phaser.Scene {
                 0
             );
             sprite.setScale(2.5);
-            sprite.setDepth(isLocal ? 3 : 2);
+            sprite.setDepth(10000);
             const label = this.add
                 .text(sprite.x, sprite.y - 28, nickname, {
                     backgroundColor: isLocal ? '#29452f' : '#172226',
@@ -157,7 +290,8 @@ class TopDownScene extends Phaser.Scene {
                     fontSize: '8px'
                 })
                 .setOrigin(0.5)
-                .setPadding(4, 2, 4, 2);
+                .setPadding(4, 2, 4, 2)
+                .setDepth(10001);
             view = { sprite, label, characterId };
             this.players.set(player.user_id, view);
             if (isLocal) this.cameras.main.startFollow(sprite, true, 0.08, 0.08);
@@ -169,6 +303,8 @@ class TopDownScene extends Phaser.Scene {
         view.label.setText(nickname);
         view.sprite.setPosition(logicalToWorld(player.x), logicalToWorld(player.y));
         view.label.setPosition(view.sprite.x, view.sprite.y - 28);
+        view.sprite.setDepth(10000);
+        view.label.setDepth(10001);
         view.sprite.setFlipX(
             player.direction === 'west' ||
                 player.direction === 'northwest' ||
@@ -176,8 +312,10 @@ class TopDownScene extends Phaser.Scene {
         );
         view.sprite.setAlpha(player.status === 'eliminated' ? 0.45 : 1);
         const animationKey = `${view.characterId}-walk`;
-        if (player.status === 'eliminated') view.sprite.stop();
-        else if (this.anims.exists(animationKey)) view.sprite.play(animationKey, true);
+        if (player.status === 'eliminated' || player.direction === 'stop') {
+            view.sprite.stop();
+            view.sprite.setFrame(0);
+        } else if (this.anims.exists(animationKey)) view.sprite.play(animationKey, true);
         if (isLocal) this.controlsEnabled = player.status !== 'eliminated';
     }
 
@@ -223,7 +361,7 @@ class TopDownScene extends Phaser.Scene {
     }
 }
 
-export function createTopDownGame({ root, client, profile, snapshot, onHudUpdate }) {
+export function createTopDownGame({ root, client, profile, snapshot, room, onHudUpdate }) {
     const scene = new TopDownScene(onHudUpdate);
     root.replaceChildren();
     const game = new Phaser.Game({
@@ -242,7 +380,7 @@ export function createTopDownGame({ root, client, profile, snapshot, onHudUpdate
         },
         scene
     });
-    game.scene.start('top-down-scene', { client, profile, snapshot });
+    game.scene.start('top-down-scene', { client, profile, snapshot, room });
     return {
         game,
         applySnapshot: snapshotValue => scene.applySnapshot(snapshotValue),

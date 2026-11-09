@@ -201,6 +201,7 @@ function showGame(snapshot = currentMatchSnapshot) {
         client: websocketClient,
         profile,
         snapshot,
+        room: currentRoomSnapshot?.room,
         onHudUpdate: ({ floor, status }) => {
             document.getElementById('game-floor').textContent = String(floor).padStart(2, '0');
             document.getElementById('game-player-status').textContent = status;

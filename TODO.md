@@ -41,16 +41,17 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-24** `feat: add the room browser screen` — Exibir salas disponíveis, permitir atualizar a lista e entrar em uma sala; mostrar feedback para sala cheia ou indisponível.
 - [x] **MVP-25** `feat: add the room lobby screen` — Exibir participantes e estado da sala, controles de owner, configuração da sala, saída e início da partida; suportar o fluxo de espectador.
 - [x] **MVP-26** `feat: render the top-down game scene` — Criar o mapa e personagens provisórios pixelados, câmera e controles de movimento em oito direções, refletindo o estado recebido do servidor.
-- [ ] **MVP-27** `feat: add the question and notebook interface` — Exibir enunciado e alternativas, enviar apenas a escolha do jogador, mostrar feedback após avaliação e renderizar a ordem/número de caderno atribuído àquele jogador.
-- [ ] **MVP-28** `feat: add spectator and live ranking views` — Mostrar a partida e o ranking em tempo real para espectadores e jogadores sem conceder controles de jogo a espectadores.
-- [ ] **MVP-29** `feat: add game results and rematch flow` — Exibir resultado final, classificação e transição de volta ao lobby, incluindo o fluxo para o owner iniciar outra partida.
-- [ ] **MVP-30** `style: complete responsive pixel-art presentation` — Aplicar o estilo retro/pixelado definido em `docs/STYLE.md`, estados de carregamento/vazio/erro e layout utilizável em telas pequenas e grandes.
+- [x] **MVP-27** `feat: apply the tileset to the game scene` — Substituir os elementos provisórios pelo tileset documentado em `docs/TILESET.md`, aplicar piso, paredes, pontos de surgimento, cadernos e a composição visual da porta em seus estados. Nesta etapa, cadernos e porta devem ser renderizados no cenário, mas ainda não precisam ter funcionalidade ou interação.
+- [ ] **MVP-28** `feat: add the question and notebook interface` — Exibir enunciado e alternativas, enviar apenas a escolha do jogador, mostrar feedback após avaliação e renderizar a ordem/número de caderno atribuído àquele jogador.
+- [ ] **MVP-29** `feat: add spectator and live ranking views` — Mostrar a partida e o ranking em tempo real para espectadores e jogadores sem conceder controles de jogo a espectadores.
+- [ ] **MVP-30** `feat: add game results and rematch flow` — Exibir resultado final, classificação e transição de volta ao lobby, incluindo o fluxo para o owner iniciar outra partida.
+- [ ] **MVP-31** `style: complete responsive pixel-art presentation` — Aplicar o estilo retro/pixelado definido em `docs/STYLE.md`, estados de carregamento/vazio/erro e layout utilizável em telas pequenas e grandes.
 
 ## Integração e entrega
 
-- [ ] **MVP-31** `test: cover multiplayer room and match lifecycle` — Adicionar teste de integração com múltiplos clientes WS cobrindo criar/descobrir/entrar/sair, owner handoff, espectador, início, sincronização, respostas, ranking e retorno ao lobby.
-- [ ] **MVP-32** `docs: document running and operating the MVP` — Atualizar README com instalação, configuração, comandos de desenvolvimento/build, portas, fluxo de duas ou mais sessões e solução dos erros comuns.
-- [ ] **MVP-33** `test: verify production build and MVP acceptance flow` — Rodar lint, formato, testes e build; executar o roteiro de aceitação com pelo menos dois jogadores e um espectador, cobrindo clássico, mata-mata, encerramento por tempo e encerramento por condição de vitória.
+- [ ] **MVP-32** `test: cover multiplayer room and match lifecycle` — Adicionar teste de integração com múltiplos clientes WS cobrindo criar/descobrir/entrar/sair, owner handoff, espectador, início, sincronização, respostas, ranking e retorno ao lobby.
+- [ ] **MVP-33** `docs: document running and operating the MVP` — Atualizar README com instalação, configuração, comandos de desenvolvimento/build, portas, fluxo de duas ou mais sessões e solução dos erros comuns.
+- [ ] **MVP-34** `test: verify production build and MVP acceptance flow` — Rodar lint, formato, testes e build; executar o roteiro de aceitação com pelo menos dois jogadores e um espectador, cobrindo clássico, mata-mata, encerramento por tempo e encerramento por condição de vitória.
 
 ## Critério de MVP concluído
 

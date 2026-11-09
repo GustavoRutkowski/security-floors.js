@@ -586,7 +586,9 @@ function handlePlayerMove(socket, payload, requestId, presence) {
         return;
     }
 
-    const position = movePosition(movement, payload.direction);
+    const position = movePosition(movement, payload.direction, {
+        notebooksPerFloor: match.notebooksPerFloor
+    });
     Object.assign(movement, position, {
         direction: payload.direction,
         sequence: payload.sequence

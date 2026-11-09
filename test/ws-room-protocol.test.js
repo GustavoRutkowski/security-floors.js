@@ -715,7 +715,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(ended.payload.reason, 'time_limit_reached');
         assert.deepEqual(match.movement.get(playerId), {
             x: 50,
-            y: 50,
+            y: 80,
             direction: 'stop',
             sequence: -1
         });
@@ -1071,8 +1071,8 @@ describe('room creation and listing WebSocket events', () => {
             character_id: 'avatar-1',
             sequence: 0,
             direction: 'east',
-            x: 51,
-            y: 50
+            x: 52.5,
+            y: 80
         });
 
         const stale = await sendRequest(owner, {
@@ -1095,7 +1095,7 @@ describe('room creation and listing WebSocket events', () => {
             payload: { sequence: 1, direction: 'east', x: 100, y: 100 }
         });
         assert.equal(forgedCoordinates.payload.code, 'INVALID_MESSAGE');
-        assert.equal(server.presence.rooms.get(roomId).match.movement.get(playerId).x, 51);
+        assert.equal(server.presence.rooms.get(roomId).match.movement.get(playerId).x, 52.5);
     });
 
     it('advances classic players and opens the next floor after the door wait', async () => {
