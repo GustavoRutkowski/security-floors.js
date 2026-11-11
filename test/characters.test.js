@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { URL } from 'node:url';
 import { CHARACTERS, DEFAULT_CHARACTER_ID } from '../web/services/character-catalog.js';
@@ -22,5 +22,16 @@ describe('character catalog', () => {
             CHARACTERS.find(character => character.id === DEFAULT_CHARACTER_ID).name,
             'BOBABAO'
         );
+    });
+
+    it('uses three 16x16 animation frames in every character spritesheet', () => {
+        for (const character of CHARACTERS) {
+            const image = readFileSync(
+                new URL(`../web/spritesheets/characters/${character.sprite}`, import.meta.url)
+            );
+            assert.equal(image.toString('hex', 0, 8), '89504e470d0a1a0a');
+            assert.equal(image.readUInt32BE(16), 16, `${character.sprite} width`);
+            assert.equal(image.readUInt32BE(20), 48, `${character.sprite} height`);
+        }
     });
 });

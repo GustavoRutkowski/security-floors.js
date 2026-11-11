@@ -79,7 +79,8 @@ function showGame(snapshot = state.getState().matchSnapshot) {
         snapshot: snapshot ?? currentState.matchSnapshot,
         client: websocketClient,
         profile: currentState.profile,
-        room: currentState.roomSnapshot?.room
+        room: currentState.roomSnapshot?.room,
+        deadline: (snapshot ?? currentState.matchSnapshot)?.deadline
     });
 }
 
@@ -159,9 +160,9 @@ function connectWebSocket(profile) {
         showLobby(snapshot);
     });
     websocketClient.addEventListener('room.left', () => showHome('VOCÊ SAIU DA SALA'));
-    websocketClient.addEventListener('match.started', () => {
+    websocketClient.addEventListener('match.started', event => {
         document.getElementById('lobby-message').textContent = 'PARTIDA INICIADA';
-        showGame();
+        showGame({ ...state.getState().matchSnapshot, ...event.detail.payload });
         window.dispatchEvent(new CustomEvent('security-floors:match-started'));
     });
     websocketClient.addEventListener('match.snapshot', event => {
@@ -192,6 +193,9 @@ function connectWebSocket(profile) {
             });
         }
         gameFeature.updateMovement(updatedPlayer);
+    });
+    websocketClient.addEventListener('ranking.updated', event => {
+        gameFeature.updateRanking(event.detail.payload.entries);
     });
     websocketClient.addEventListener('spectator.started', event => {
         const target = event.detail.payload.target_user_id;

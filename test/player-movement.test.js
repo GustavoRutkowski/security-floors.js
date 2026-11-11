@@ -23,16 +23,24 @@ describe('authoritative player movement', () => {
 
     it('stops at walls and notebooks instead of crossing their tiles', () => {
         assert.deepEqual(movePosition({ x: 50, y: 10 }, 'north'), { x: 50, y: 10 });
-        assert.deepEqual(movePosition({ x: 18, y: 54 }, 'east', { notebooksPerFloor: 2 }), {
-            x: 18,
-            y: 54
-        });
+        const blockedByTable = movePosition({ x: 4.5, y: 56 }, 'east', { notebooksPerFloor: 2 });
+        assert.equal(blockedByTable.x, 4.5);
+        assert.equal(blockedByTable.y, 56);
+    });
+
+    it('advances to the last safe position when approaching a table', () => {
+        const start = { x: 20, y: (8.5 * 100) / 15 };
+        const next = movePosition(start, 'west', { notebooksPerFloor: 2 });
+        assert.ok(next.x < start.x);
+        assert.ok(next.x > 13.33);
+        assert.equal(next.y, start.y);
+        assert.deepEqual(movePosition(next, 'west', { notebooksPerFloor: 2 }), next);
     });
 
     it('allows movement through spawnpoint tiles', () => {
-        assert.deepEqual(movePosition({ x: 26, y: 34 }, 'east', { notebooksPerFloor: 2 }), {
-            x: 28.5,
-            y: 34
+        assert.deepEqual(movePosition({ x: 10, y: 20 }, 'east', { notebooksPerFloor: 2 }), {
+            x: 12.5,
+            y: 20
         });
     });
 

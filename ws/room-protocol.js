@@ -97,6 +97,8 @@ function matchSnapshot(roomId, presence, userId) {
 
     return {
         revision: match.movementRevision,
+        started_at: match.startedAt,
+        deadline: match.deadline,
         players: presenceSnapshot.players
             .filter(player => visibleIds.has(player.userId))
             .map(player => ({
@@ -1260,7 +1262,11 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
                 send(
                     connection,
                     'match.started',
-                    { room_id: room.id },
+                    {
+                        room_id: room.id,
+                        started_at: matchDistribution.startedAt,
+                        deadline: matchDistribution.deadline
+                    },
                     connection === socket ? requestId : undefined
                 );
             }
