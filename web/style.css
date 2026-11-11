@@ -643,7 +643,7 @@ h1 {
 
 .character-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 8px;
 }
 
@@ -730,18 +730,6 @@ h1 {
     flex: 0 0 auto;
     background-repeat: no-repeat;
     image-rendering: pixelated;
-}
-
-.character-sprite[data-character='bobabao'] {
-    background-image: url('./spritesheets/bobabao.png');
-}
-
-.character-sprite[data-character='lixaredo'] {
-    background-image: url('./spritesheets/lixaredo.png');
-}
-
-.character-sprite[data-character='tubarina'] {
-    background-image: url('./spritesheets/tubarina.png');
 }
 
 .character-sprite-small {

@@ -6,7 +6,7 @@ import {
     createUserId,
     loadProfile,
     saveProfile
-} from '../web/profile.js';
+} from '../web/services/profile-storage.js';
 
 function createStorage(initialValues = {}) {
     const values = new Map(Object.entries(initialValues));
@@ -78,5 +78,22 @@ describe('local player profile', () => {
         assert.throws(() =>
             saveProfile({ nickname: 'x'.repeat(33), character_id: 'bobabao' }, storage)
         );
+    });
+
+    it('replaces a removed character with Bobabao without changing the saved UUID', () => {
+        const storage = createStorage({
+            [PROFILE_STORAGE_KEY]: JSON.stringify({
+                user_id: '11111111-1111-4111-8111-111111111111',
+                nickname: 'Player',
+                character_id: 'removed-character'
+            })
+        });
+
+        assert.deepEqual(loadProfile(storage), {
+            user_id: '11111111-1111-4111-8111-111111111111',
+            nickname: 'Player',
+            character_id: 'bobabao'
+        });
+        assert.equal(JSON.parse(storage.getItem(PROFILE_STORAGE_KEY)).character_id, 'bobabao');
     });
 });

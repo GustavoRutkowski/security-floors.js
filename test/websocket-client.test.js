@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { WebSocketClient, validateEvent } from '../web/websocket-client.js';
+import { WebSocketClient, validateEvent } from '../web/services/websocket-client.js';
 
 const profile = {
     user_id: '11111111-1111-4111-8111-111111111111',

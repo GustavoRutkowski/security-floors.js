@@ -1,6 +1,6 @@
 # Folhas de Sprites
 
-Cada personagem selecionável é descrito em [`web/characters.json`](../web/characters.json), que define seu ID, nome e arquivo de sprite. Para adicionar um personagem, coloque a nova folha em `web/spritesheets/` e adicione uma entrada ao catálogo JSON.
+Cada personagem selecionável é descrito em [`web/characters.json`](../web/characters.json), que define seu ID, nome e arquivo de sprite. Para adicionar um personagem, coloque uma folha PNG em `web/spritesheets/characters/` e adicione uma entrada correspondente ao catálogo JSON. A seleção de perfil e os assets do jogo são gerados desse catálogo; testes verificam se os arquivos da pasta e os nomes registrados correspondem exatamente. `bobabao` deve permanecer no catálogo porque é o personagem padrão.
 
 Todas as folhas seguem a seguinte regra:
 
@@ -11,16 +11,16 @@ Todas as folhas seguem a seguinte regra:
 
 Os sprites atualmente disponíveis são:
 
-- `web/spritesheets/bobabao.png`
-- `web/spritesheets/carlos.png`
-- `web/spritesheets/dr.vultu.png`
-- `web/spritesheets/eteubaldo.png`
-- `web/spritesheets/lixaredo.png`
-- `web/spritesheets/nefasto.png`
-- `web/spritesheets/plantosca.png`
-- `web/spritesheets/resmungossauro.png`
-- `web/spritesheets/rinocornio.png`
-- `web/spritesheets/robotudo.png`
-- `web/spritesheets/tubarina.png`
-- `web/spritesheets/verme_d._goma.png` (nome exibido: Verne D. Goma)
-- `web/spritesheets/zoiuda.png`
+- `web/spritesheets/characters/bobabao.png`
+- `web/spritesheets/characters/carlos.png`
+- `web/spritesheets/characters/dr.vultu.png`
+- `web/spritesheets/characters/eteubaldo.png`
+- `web/spritesheets/characters/lixaredo.png`
+- `web/spritesheets/characters/nefasto.png`
+- `web/spritesheets/characters/plantosca.png`
+- `web/spritesheets/characters/resmungossauro.png`
+- `web/spritesheets/characters/rinocornio.png`
+- `web/spritesheets/characters/robotudo.png`
+- `web/spritesheets/characters/tubarina.png`
+- `web/spritesheets/characters/verme_d._goma.png` (nome exibido: Verme D. Goma)
+- `web/spritesheets/characters/zoiuda.png`

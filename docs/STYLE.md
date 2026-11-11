@@ -1,6 +1,6 @@
 # Estilo de Arte e Spritesheets
 
-As spritesheets dos personagens estão em `/web/spritesheets` e são listadas em `web/characters.json`. Cada arquivo mede 16x48px e contém três frames verticais de 16x16; o primeiro frame é usado como standing e os três frames compõem walking. A tela de perfil exibe os personagens com nearest-neighbor e animação pixelada. Consulte [`SPRITESHEETS.md`](SPRITESHEETS.md) para a lista e convenção dos arquivos.
+As spritesheets dos personagens estão em `/web/spritesheets/characters` e são listadas em `web/characters.json`. Cada arquivo mede 16x48px e contém três frames verticais de 16x16; o primeiro frame é usado como standing e os três frames compõem walking. A tela de perfil exibe os personagens com nearest-neighbor e animação pixelada. Consulte [`SPRITESHEETS.md`](SPRITESHEETS.md) para a lista e convenção dos arquivos.
 
 O jogo será 2D e terá uma visão de cima (movimentação em 8 direções, sem gravidade)
 

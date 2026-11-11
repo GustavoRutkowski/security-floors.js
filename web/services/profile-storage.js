@@ -1,10 +1,8 @@
+import { CHARACTERS, DEFAULT_CHARACTER_ID } from './character-catalog.js';
+
 export const PROFILE_STORAGE_KEY = 'security-floors.profile.v1';
 
-export const CHARACTERS = Object.freeze([
-    Object.freeze({ id: 'bobabao', name: 'BOBABAO' }),
-    Object.freeze({ id: 'lixaredo', name: 'LIXAREDO' }),
-    Object.freeze({ id: 'tubarina', name: 'TUBARINA' })
-]);
+export { CHARACTERS };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHARACTER_IDS = new Set(CHARACTERS.map(character => character.id));
@@ -17,8 +15,7 @@ function isValidProfile(profile) {
         UUID_PATTERN.test(profile.user_id) &&
         typeof profile.nickname === 'string' &&
         profile.nickname.trim() !== '' &&
-        profile.nickname.length <= 32 &&
-        CHARACTER_IDS.has(profile.character_id)
+        profile.nickname.length <= 32
     );
 }
 
@@ -44,11 +41,17 @@ export function loadProfile(storage = globalThis.localStorage) {
 
         const profile = JSON.parse(serializedProfile);
         if (isValidProfile(profile)) {
-            return {
+            const normalizedProfile = {
                 user_id: profile.user_id,
                 nickname: profile.nickname,
-                character_id: profile.character_id
+                character_id: CHARACTER_IDS.has(profile.character_id)
+                    ? profile.character_id
+                    : DEFAULT_CHARACTER_ID
             };
+            if (normalizedProfile.character_id !== profile.character_id) {
+                storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizedProfile));
+            }
+            return normalizedProfile;
         }
 
         storage.removeItem(PROFILE_STORAGE_KEY);

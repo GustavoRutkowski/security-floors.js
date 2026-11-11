@@ -54,63 +54,20 @@
                         </div>
 
                         <fieldset class="character-fieldset">
-                            <legend>ESCOLHA SEU PERSONAGEM <span>/// 03</span></legend>
-                            <div class="character-grid" role="radiogroup" aria-label="Personagem">
-                                <label class="character-choice">
-                                    <input
-                                        type="radio"
-                                        name="character_id"
-                                        value="bobabao"
-                                        checked
-                                    />
-                                    <span class="character-choice-body">
-                                        <span class="character-choice-top">
-                                            <span
-                                                class="character-sprite character-sprite-small"
-                                                data-character="bobabao"
-                                                aria-hidden="true"
-                                            ></span>
-                                            <span class="choice-index">01</span>
-                                        </span>
-                                        <span class="character-name">BOBABAO</span>
-                                        <span class="choice-state">SELECIONAR</span>
-                                    </span>
-                                </label>
-                                <label class="character-choice">
-                                    <input type="radio" name="character_id" value="lixaredo" />
-                                    <span class="character-choice-body">
-                                        <span class="character-choice-top">
-                                            <span
-                                                class="character-sprite character-sprite-small"
-                                                data-character="lixaredo"
-                                                aria-hidden="true"
-                                            ></span>
-                                            <span class="choice-index">02</span>
-                                        </span>
-                                        <span class="character-name">LIXAREDO</span>
-                                        <span class="choice-state">SELECIONAR</span>
-                                    </span>
-                                </label>
-                                <label class="character-choice">
-                                    <input type="radio" name="character_id" value="tubarina" />
-                                    <span class="character-choice-body">
-                                        <span class="character-choice-top">
-                                            <span
-                                                class="character-sprite character-sprite-small"
-                                                data-character="tubarina"
-                                                aria-hidden="true"
-                                            ></span>
-                                            <span class="choice-index">03</span>
-                                        </span>
-                                        <span class="character-name">TUBARINA</span>
-                                        <span class="choice-state">SELECIONAR</span>
-                                    </span>
-                                </label>
-                            </div>
+                            <legend>
+                                ESCOLHA SEU PERSONAGEM
+                                <span id="character-count">/// 00</span>
+                            </legend>
+                            <div
+                                class="character-grid"
+                                id="character-grid"
+                                role="radiogroup"
+                                aria-label="Personagem"
+                            ></div>
                         </fieldset>
 
                         <p id="profile-error" class="form-message" role="alert" hidden></p>
-                        <button class="play-button" type="submit">
+                        <button class="play-button" id="submit-profile" type="button">
                             <span>JOGAR</span>
                             <span class="play-arrow" aria-hidden="true">&gt;&gt;</span>
                         </button>
@@ -467,6 +424,6 @@
             <p class="noscript-message">Ative JavaScript para inicializar Security Floors.</p>
         </noscript>
 
-        <script type="module" src="/main.js"></script>
+        <script type="module" src="app.js"></script>
     </body>
 </html>

@@ -16,10 +16,8 @@
     { "id": "tubarina", "name": "TUBARINA", "sprite": "tubarina.png" },
     {
         "id": "verme_d._goma",
-        "name": "VERNE D. GOMA",
+        "name": "VERME D. GOMA",
         "sprite": "verme_d._goma.png"
     },
-    { "id": "zoiuda", "name": "ZOIUDA", "sprite": "zoiuda.png" },
-    { "id": "gatol", "name": "GATOL", "sprite": "gatol.png" },
-    { "id": "leria", "name": "LERIA", "sprite": "leria.png" }
+    { "id": "zoiuda", "name": "ZOIUDA", "sprite": "zoiuda.png" }
 ]

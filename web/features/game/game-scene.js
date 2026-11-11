@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { CHARACTERS } from './profile.js';
+import { CHARACTERS } from '../../services/character-catalog.js';
+import { getCharacterSpriteUrl } from '../../services/character-assets.js';
 
 const WORLD_SIZE = 800;
 const LOGICAL_MAP_SIZE = 100;
@@ -171,7 +172,7 @@ class TopDownScene extends Phaser.Scene {
             frameHeight: 16
         });
         for (const character of CHARACTERS) {
-            this.load.spritesheet(character.id, `/spritesheets/${character.sprite}`, {
+            this.load.spritesheet(character.id, getCharacterSpriteUrl(character), {
                 frameWidth: 16,
                 frameHeight: 16
             });
