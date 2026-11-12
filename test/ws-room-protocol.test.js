@@ -90,7 +90,7 @@ async function moveUntil(client, userId, match, direction, shouldStop, prefix) {
     assert.equal(shouldStop(), true, `Movement route did not reach its ${prefix} target`);
 }
 
-async function walkThroughOpenDoor(client, userId, match, prefix) {
+async function walkThroughOpenDoor(client, userId, match, prefix, finishRun = false) {
     const progress = match.progress.get(userId);
     const currentFloor = progress.floor;
     await moveUntil(
@@ -122,7 +122,7 @@ async function walkThroughOpenDoor(client, userId, match, prefix) {
         userId,
         match,
         'north',
-        () => progress.floor !== currentFloor,
+        () => (finishRun ? progress.status === 'finished' : progress.floor !== currentFloor),
         `${prefix} floor transition`
     );
 }
@@ -823,6 +823,8 @@ describe('room creation and listing WebSocket events', () => {
             if (nextQuestionPromise) {
                 await walkThroughOpenDoor(owner, playerId, match, `race-owner-${floor}`);
                 question = (await nextQuestionPromise).payload;
+            } else {
+                await walkThroughOpenDoor(owner, playerId, match, 'race-owner-final', true);
             }
         }
 
@@ -844,6 +846,14 @@ describe('room creation and listing WebSocket events', () => {
                     `race-guest-${floor}`
                 );
                 guestQuestion = (await nextQuestionPromise).payload;
+            } else {
+                await walkThroughOpenDoor(
+                    guest,
+                    '22222222-2222-4222-8222-222222222222',
+                    match,
+                    'race-guest-final',
+                    true
+                );
             }
         }
 
@@ -898,6 +908,8 @@ describe('room creation and listing WebSocket events', () => {
             if (nextQuestionPromise) {
                 await walkThroughOpenDoor(owner, playerId, match, `completion-owner-${floor}`);
                 question = (await nextQuestionPromise).payload;
+            } else {
+                await walkThroughOpenDoor(owner, playerId, match, 'completion-owner-final', true);
             }
         }
 
@@ -918,6 +930,14 @@ describe('room creation and listing WebSocket events', () => {
                     `completion-guest-${floor}`
                 );
                 guestQuestion = (await nextQuestionPromise).payload;
+            } else {
+                await walkThroughOpenDoor(
+                    guest,
+                    '22222222-2222-4222-8222-222222222222',
+                    match,
+                    'completion-guest-final',
+                    true
+                );
             }
         }
 
@@ -1122,11 +1142,24 @@ describe('room creation and listing WebSocket events', () => {
 
         const ownerRankingFive = waitForMessage(owner, 'ranking.updated');
         const guestRankingFive = waitForMessage(guest, 'ranking.updated');
+        const ownerSpectatorStarted = waitForMessage(
+            owner,
+            'spectator.started',
+            payload => payload.reason === 'run_finished'
+        );
         await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'owner-finishes-first',
             payload: { question_id: ownerQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            owner,
+            playerId,
+            server.presence.rooms.get(roomId).match,
+            'rank-owner-final',
+            true
+        );
+        assert.equal((await ownerSpectatorStarted).payload.target_user_id, guestId);
         const ownerFinishedRanking = (await ownerRankingFive).payload;
         assert.deepEqual((await guestRankingFive).payload, ownerFinishedRanking);
         assert.equal(ownerFinishedRanking.entries[0].user_id, playerId);
@@ -1152,11 +1185,24 @@ describe('room creation and listing WebSocket events', () => {
 
         const ownerEnded = waitForMessage(owner, 'match.ended');
         const guestEnded = waitForMessage(guest, 'match.ended');
+        const guestSpectatorStarted = waitForMessage(
+            guest,
+            'spectator.started',
+            payload => payload.reason === 'run_finished'
+        );
         await sendRequest(guest, {
             type: 'question.answer',
             request_id: 'guest-finishes-after-owner',
             payload: { question_id: guestQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            guest,
+            guestId,
+            server.presence.rooms.get(roomId).match,
+            'rank-guest-final',
+            true
+        );
+        assert.equal((await guestSpectatorStarted).payload.target_user_id, null);
         const ownerResult = await ownerEnded;
         const guestResult = await guestEnded;
         assert.deepEqual(
@@ -1203,6 +1249,14 @@ describe('room creation and listing WebSocket events', () => {
             ownerSnapshot,
             guestSnapshot
         ]);
+        assert.deepEqual(ownerMatchSnapshot.payload.viewer, {
+            status: 'playing',
+            target_user_id: null
+        });
+        assert.deepEqual(guestMatchSnapshot.payload.viewer, {
+            status: 'playing',
+            target_user_id: null
+        });
         for (const snapshot of [ownerMatchSnapshot, guestMatchSnapshot]) {
             assert.deepEqual(
                 snapshot.payload.players.map(player => ({
@@ -1291,34 +1345,60 @@ describe('room creation and listing WebSocket events', () => {
         await joinGuest(roomId, 'join-classic-progression');
         insertQuestions(6);
 
-        const initialQuestionPromise = waitForMessage(owner, 'question.presented');
+        const initialQuestionPromise = waitForMessage(
+            owner,
+            'question.presented',
+            payload => payload.notebook_label === 1
+        );
+        const otherInitialQuestionPromise = waitForMessage(
+            owner,
+            'question.presented',
+            payload => payload.notebook_label === 2
+        );
         await sendRequest(owner, {
             type: 'match.start',
             request_id: 'start-classic-progression',
             payload: {}
         });
         const firstQuestion = (await initialQuestionPromise).payload;
+        const secondQuestion = (await otherInitialQuestionPromise).payload;
         assert.equal(firstQuestion.floor, 1);
+        assert.equal(secondQuestion.floor, 1);
+        assert.notEqual(secondQuestion.question_id, firstQuestion.question_id);
         assert.equal('correct_option_index' in firstQuestion, false);
         assert.equal('explanation' in firstQuestion, false);
 
-        const secondQuestionPromise = waitForMessage(owner, 'question.presented');
         const firstWrongAnswer = await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'classic-first-wrong',
-            payload: { question_id: firstQuestion.question_id, option_index: 1 }
+            payload: { question_id: secondQuestion.question_id, option_index: 1 }
         });
-        const secondQuestion = (await secondQuestionPromise).payload;
         assert.equal(firstWrongAnswer.payload.correct, false);
         assert.equal(firstWrongAnswer.payload.correct_option_index, 0);
-        assert.equal(firstWrongAnswer.payload.notebook_id, firstQuestion.notebook_id);
+        assert.equal(firstWrongAnswer.payload.notebook_id, secondQuestion.notebook_id);
         assert.equal(secondQuestion.floor, 1);
         assert.notEqual(secondQuestion.question_id, firstQuestion.question_id);
+        assert.equal('retry_after_ms' in firstWrongAnswer.payload, false);
+        assert.equal(
+            server.presence.rooms.get(roomId).match.progress.get(playerId).status,
+            'playing'
+        );
+        assert.equal(
+            disconnectTimers.some(timer => timer.delay === 5000 && !timer.cleared),
+            false
+        );
+
+        const duplicateAnswer = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-duplicate-wrong-notebook',
+            payload: { question_id: secondQuestion.question_id, option_index: 0 }
+        });
+        assert.equal(duplicateAnswer.payload.code, 'INVALID_ANSWER');
 
         const lastWrongAnswer = await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'classic-last-wrong',
-            payload: { question_id: secondQuestion.question_id, option_index: 1 }
+            payload: { question_id: firstQuestion.question_id, option_index: 1 }
         });
         assert.equal(lastWrongAnswer.payload.correct, false);
         assert.equal(lastWrongAnswer.payload.retry_after_ms, 5000);
@@ -1348,29 +1428,35 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(match.progress.get(playerId).doorOpen, true);
         assert.equal(match.progress.get(playerId).answeredNotebooks.length, 2);
 
-        const floorTwoQuestionPromise = waitForMessage(owner, 'question.presented');
+        const floorTwoQuestionPromise = waitForMessage(
+            owner,
+            'question.presented',
+            payload => payload.notebook_label === 1 && payload.floor === 2
+        );
+        const floorTwoNotebookPromise = waitForMessage(
+            owner,
+            'question.presented',
+            payload => payload.notebook_label === 2 && payload.floor === 2
+        );
         await walkThroughOpenDoor(owner, playerId, match, 'classic-floor-one');
         const floorTwoQuestion = (await floorTwoQuestionPromise).payload;
         assert.equal(floorTwoQuestion.floor, 2);
-
-        const floorTwoNotebookPromise = waitForMessage(owner, 'question.presented');
-        const floorTwoWrongAnswer = await sendRequest(owner, {
-            type: 'question.answer',
-            request_id: 'classic-floor-two-first-wrong',
-            payload: { question_id: floorTwoQuestion.question_id, option_index: 1 }
-        });
         const floorTwoNotebook = (await floorTwoNotebookPromise).payload;
-        assert.equal(floorTwoWrongAnswer.payload.correct, false);
-        assert.equal(floorTwoNotebook.floor, 2);
 
         const floorTwoCorrectAnswer = await sendRequest(owner, {
             type: 'question.answer',
-            request_id: 'classic-floor-two-second-correct',
+            request_id: 'classic-floor-two-notebook-two-correct',
             payload: { question_id: floorTwoNotebook.question_id, option_index: 0 }
         });
         assert.equal(floorTwoCorrectAnswer.payload.correct, true);
         assert.equal(floorTwoCorrectAnswer.payload.door_open, true);
         assert.equal(match.progress.get(playerId).floor, 2);
+        const answerAfterCorrect = await sendRequest(owner, {
+            type: 'question.answer',
+            request_id: 'classic-answer-after-door-open',
+            payload: { question_id: floorTwoQuestion.question_id, option_index: 0 }
+        });
+        assert.equal(answerAfterCorrect.payload.code, 'ACTION_NOT_ALLOWED');
         const floorThreeQuestionPromise = waitForMessage(owner, 'question.presented');
         await walkThroughOpenDoor(owner, playerId, match, 'classic-floor-two');
         const floorThreeQuestion = (await floorThreeQuestionPromise).payload;
@@ -1435,10 +1521,10 @@ describe('room creation and listing WebSocket events', () => {
         assert.deepEqual((await guestEliminationRanking).payload, ranking);
         assert.deepEqual(
             ranking.entries.map(entry => entry.user_id),
-            [guestId, playerId]
+            [playerId, guestId]
         );
-        assert.equal(ranking.entries[0].status, 'playing');
-        assert.equal(ranking.entries[1].status, 'eliminated');
+        assert.equal(ranking.entries[0].status, 'eliminated');
+        assert.equal(ranking.entries[1].status, 'playing');
         const ownerEnded = await ownerEndedPromise;
         const guestEnded = await guestEndedPromise;
 
@@ -1449,7 +1535,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(ownerEnded.payload.reason, 'last_player_standing');
         assert.deepEqual(
             ownerEnded.payload.entries.slice(0, 2).map(entry => entry.user_id),
-            [guestId, playerId]
+            [playerId, guestId]
         );
         assert.deepEqual(ownerEnded, guestEnded);
         assert.equal(match.winnerUserId, guestId);
@@ -1477,7 +1563,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(movementAfterEnd.payload.code, 'ACTION_NOT_ALLOWED');
     });
 
-    it('ends a deathmatch when a player answers the final floor correctly', async () => {
+    it('moves completed deathmatch runs to spectating while other players continue', async () => {
         const owner = await connectClient();
         await hello(owner);
         const created = await sendRequest(owner, {
@@ -1504,8 +1590,24 @@ describe('room creation and listing WebSocket events', () => {
         insertQuestions(3);
 
         const questionPromise = waitForMessage(owner, 'question.presented');
+        const guestQuestionPromise = waitForMessage(guest, 'question.presented');
         const ownerEndedPromise = waitForMessage(owner, 'match.ended');
         const guestEndedPromise = waitForMessage(guest, 'match.ended');
+        const ownerSpectatorStarted = waitForMessage(
+            owner,
+            'spectator.started',
+            payload => payload.reason === 'run_finished'
+        );
+        const ownerSpectatorSnapshot = waitForMessage(
+            owner,
+            'match.snapshot',
+            payload => payload.viewer?.status === 'finished'
+        );
+        const guestSpectatorStarted = waitForMessage(
+            guest,
+            'spectator.started',
+            payload => payload.reason === 'run_finished'
+        );
         await sendRequest(owner, {
             type: 'match.start',
             request_id: 'start-deathmatch-question-end',
@@ -1513,6 +1615,7 @@ describe('room creation and listing WebSocket events', () => {
         });
         const match = server.presence.rooms.get(roomId).match;
         let question = (await questionPromise).payload;
+        let guestQuestion = (await guestQuestionPromise).payload;
 
         for (let floor = 1; floor <= 3; floor += 1) {
             const nextQuestionPromise =
@@ -1527,9 +1630,45 @@ describe('room creation and listing WebSocket events', () => {
                 await walkThroughOpenDoor(owner, playerId, match, `deathmatch-floor-${floor}`);
                 question = (await nextQuestionPromise).payload;
                 assert.equal(question.floor, floor + 1);
+            } else {
+                await walkThroughOpenDoor(owner, playerId, match, 'deathmatch-owner-final', true);
             }
         }
 
+        assert.equal((await ownerSpectatorStarted).payload.target_user_id, guestId);
+        const spectatorSnapshot = (await ownerSpectatorSnapshot).payload;
+        assert.equal(spectatorSnapshot.viewer.target_user_id, guestId);
+        assert.equal(
+            spectatorSnapshot.players.some(player => player.user_id === playerId),
+            false
+        );
+        assert.equal(server.presence.players.get(playerId).status, 'spectating');
+        assert.equal(match.ended, false);
+        const spectatorMove = await sendRequest(owner, {
+            type: 'player.move',
+            request_id: 'finished-run-movement-denied',
+            payload: { sequence: 0, direction: 'east' }
+        });
+        assert.equal(spectatorMove.payload.code, 'FORBIDDEN_ROLE');
+
+        for (let floor = 1; floor <= 3; floor += 1) {
+            const nextQuestionPromise =
+                floor < 3 ? waitForMessage(guest, 'question.presented') : null;
+            const answer = await sendRequest(guest, {
+                type: 'question.answer',
+                request_id: `deathmatch-guest-correct-${floor}`,
+                payload: { question_id: guestQuestion.question_id, option_index: 0 }
+            });
+            assert.equal(answer.payload.correct, true);
+            if (nextQuestionPromise) {
+                await walkThroughOpenDoor(guest, guestId, match, `deathmatch-guest-floor-${floor}`);
+                guestQuestion = (await nextQuestionPromise).payload;
+            } else {
+                await walkThroughOpenDoor(guest, guestId, match, 'deathmatch-guest-final', true);
+            }
+        }
+
+        assert.equal((await guestSpectatorStarted).payload.target_user_id, null);
         const ownerEnded = await ownerEndedPromise;
         const guestEnded = await guestEndedPromise;
         assert.equal(ownerEnded.payload.reason, 'questions_exhausted');
@@ -1997,17 +2136,28 @@ describe('room creation and listing WebSocket events', () => {
         assert.deepEqual((await secondFirstEliminationRanking).payload, firstEliminationRanking);
         assert.deepEqual(
             firstEliminationRanking.entries.map(entry => entry.user_id),
-            [playerId, secondGuestId, firstGuestId]
+            [playerId, firstGuestId, secondGuestId]
         );
 
+        const followedSnapshotPromise = waitForMessage(
+            firstGuest,
+            'match.snapshot',
+            payload => payload.viewer?.target_user_id === secondGuestId
+        );
         const follow = await sendRequest(firstGuest, {
             type: 'spectator.follow',
             request_id: 'spectator-follows-second-guest',
             payload: { target_user_id: secondGuestId }
         });
+        const followedSnapshot = await followedSnapshotPromise;
         assert.equal(follow.type, 'spectator.following');
         assert.equal(follow.request_id, 'spectator-follows-second-guest');
         assert.equal(follow.payload.target_user_id, secondGuestId);
+        assert.equal(followedSnapshot.payload.viewer.status, 'eliminated');
+        assert.deepEqual(
+            followedSnapshot.payload.players.map(player => player.user_id),
+            [secondGuestId]
+        );
 
         const spectatorMove = await sendRequest(firstGuest, {
             type: 'player.move',
@@ -2049,7 +2199,7 @@ describe('room creation and listing WebSocket events', () => {
         assert.deepEqual((await secondSecondEliminationRanking).payload, secondEliminationRanking);
         assert.deepEqual(
             secondEliminationRanking.entries.map(entry => entry.user_id),
-            [playerId, secondGuestId, firstGuestId]
+            [playerId, firstGuestId, secondGuestId]
         );
         assert.deepEqual(
             getPlayerViewers(server.presence, roomId, playerId).map(player => player.userId),

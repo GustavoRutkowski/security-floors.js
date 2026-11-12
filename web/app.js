@@ -209,15 +209,14 @@ function connectWebSocket(profile) {
         gameFeature.updateRanking(event.detail.payload.entries);
     });
     websocketClient.addEventListener('spectator.started', event => {
-        const target = event.detail.payload.target_user_id;
-        gameFeature.showSpectatorNote(
-            target
-                ? `VOCÊ FOI ELIMINADO. ACOMPANHANDO ${target}.`
-                : 'VOCÊ FOI ELIMINADO. NÃO HÁ JOGADORES ATIVOS PARA ACOMPANHAR.'
-        );
+        const { target_user_id: targetUserId, reason } = event.detail.payload;
+        gameFeature.setSpectatorMode({
+            status: reason === 'run_finished' ? 'finished' : 'eliminated',
+            targetUserId
+        });
     });
     websocketClient.addEventListener('spectator.following', event => {
-        gameFeature.showSpectatorNote(`ACOMPANHANDO ${event.detail.payload.target_user_id}.`);
+        gameFeature.setSpectatorTarget(event.detail.payload.target_user_id);
     });
     websocketClient.addEventListener('protocol-error', event => {
         updateConnectionStatus(websocketClient.status, event.detail.message);

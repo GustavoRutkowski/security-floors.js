@@ -171,7 +171,7 @@ describe('authoritative room presence state', () => {
         assert.throws(() => getPlayerViewers(state, 'room-1', 'player-1'), /active player/);
     });
 
-    it('does not allow spectators in classic rooms', () => {
+    it('allows completed classic players to spectate active room members', () => {
         const state = createPresenceState();
         createPresenceRoom(state, 'room-1', 'classic');
         connect(state, 'player-1');
@@ -179,10 +179,9 @@ describe('authoritative room presence state', () => {
         joinRoomPresence(state, 'room-1', 'player-1');
         joinRoomPresence(state, 'room-1', 'player-2');
 
-        assert.throws(
-            () => setPlayerSpectating(state, 'room-1', 'player-2', 'player-1'),
-            /only available.*deathmatch/
-        );
+        const spectator = setPlayerSpectating(state, 'room-1', 'player-2', 'player-1');
+        assert.equal(spectator.status, 'spectating');
+        assert.equal(spectator.targetUserId, 'player-1');
     });
 
     it('allows the last eliminated deathmatch player to have no spectator target', () => {

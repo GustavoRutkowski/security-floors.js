@@ -111,6 +111,36 @@ function validateEvent(message) {
         );
     }
 
+    if (message.type === 'spectator.started') {
+        return (
+            typeof message.payload.user_id === 'string' &&
+            UUID_PATTERN.test(message.payload.user_id) &&
+            (message.payload.target_user_id === null ||
+                (typeof message.payload.target_user_id === 'string' &&
+                    UUID_PATTERN.test(message.payload.target_user_id))) &&
+            ['wrong_answer', 'reconnect_expired', 'run_finished'].includes(message.payload.reason)
+        );
+    }
+
+    if (message.type === 'spectator.following') {
+        return (
+            message.payload.target_user_id === null ||
+            (typeof message.payload.target_user_id === 'string' &&
+                UUID_PATTERN.test(message.payload.target_user_id))
+        );
+    }
+
+    if (message.type === 'match.snapshot') {
+        return (
+            isRecord(message.payload.viewer) &&
+            ['playing', 'eliminated', 'finished'].includes(message.payload.viewer.status) &&
+            (message.payload.viewer.target_user_id === null ||
+                (typeof message.payload.viewer.target_user_id === 'string' &&
+                    UUID_PATTERN.test(message.payload.viewer.target_user_id))) &&
+            Array.isArray(message.payload.players)
+        );
+    }
+
     if (message.type === 'session.ready') {
         return (
             message.payload.protocol_version === PROTOCOL_VERSION &&

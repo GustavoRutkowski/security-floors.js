@@ -17,9 +17,11 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 - Cada andar possui K cadernos de tarefas
 - Ao acertar uma questão, o menu fecha e a porta abre; o jogador precisa atravessá-la para chegar ao próximo andar
 - Jogadores só veem os participantes que estão no mesmo andar; ao mudar de andar, o spawn é no tile `[14][7]` e a porta do novo andar começa fechada
-- Você pode avançar ao acertar qualquer uma das K questões, apresentadas em uma ordem individual de cadernos
-- Se errar todos os cadernos do andar, aguarda 5 segundos até a porta abrir e então precisa atravessá-la
-- O ranking/placar é dado em ordem crescente do jogador que chegar primeiro no andar final
+- Todos os K cadernos do andar ficam disponíveis ao mesmo tempo, cada um com uma questão diferente
+- Você pode responder qualquer caderno; ao acertar, todos os outros ficam bloqueados e a porta abre
+- Um caderno respondido incorretamente fica bloqueado; ao errar todos os cadernos, aguarda 5 segundos até a porta abrir e então precisa atravessá-la
+- Ao atravessar a porta do último andar, você conclui a run e passa a espectador até a partida acabar
+- O ranking fica visível durante todo o jogo: andar mais alto primeiro, com desempate pela ordem de chegada
 - Quando todos os jogadores chegam até o topo (ou o tempo T se encerra), a partida acaba e uma tela com ranking é exibida
 
 ## Telas
@@ -27,7 +29,7 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 ## Modos de Jogo
 
 - Clássico (regras já descritas)
-- Mata-Mata --> Existe apenas um caderno por andar. Quem errar é eliminado instantaneamente; vence quem responder corretamente todas as questões ou permanecer como último jogador ativo. Se todos os concorrentes restantes expirarem a tolerância de reconexão, o último a expirar vence por ausência de adversários.
+- Mata-Mata --> Existe apenas um caderno por andar. Quem errar é eliminado instantaneamente; quem conclui a run vira espectador enquanto os demais continuam. A primeira run concluída vence quando não restarem competidores ativos.
 
 ## Estrutura de Pastas:
 

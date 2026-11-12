@@ -10,6 +10,7 @@ const GAME_VIEW_SIZE = 480;
 const MOVE_INTERVAL_MS = 85;
 const NOTEBOOK_INTERACTION_RANGE = 8;
 const DOOR_ANIMATION_STAGE_MS = 250;
+const SPECTATOR_VIEW_TILES = 5;
 const PIXEL_FONT = "'Press Start 2P', monospace";
 const CHARACTER_IDS = CHARACTERS.map(character => character.id);
 const TILESET_KEY = 'tileset';
@@ -37,7 +38,7 @@ function getDirection(cursors, keys) {
 }
 
 class TopDownScene extends Phaser.Scene {
-    constructor(onHudUpdate) {
+    constructor(onHudUpdate, onSpectatorError) {
         super('top-down-scene');
         this.players = new Map();
         this.latestSnapshot = null;
@@ -50,10 +51,16 @@ class TopDownScene extends Phaser.Scene {
         this.ready = false;
         this.pendingMovements = new Map();
         this.onHudUpdate = onHudUpdate;
+        this.onSpectatorError = onSpectatorError;
+        this.availableQuestions = new Map();
+        this.rankingEntries = [];
         this.notebooksPerFloor = 1;
         this.localPlayer = null;
+        this.viewerStatus = 'playing';
+        this.spectatorMode = false;
+        this.spectatorTargetId = null;
+        this.pendingSpectatorTargetId = null;
         this.currentQuestion = null;
-        this.nextQuestion = null;
         this.answerResult = null;
         this.questionError = null;
         this.questionState = 'closed';
@@ -74,8 +81,18 @@ class TopDownScene extends Phaser.Scene {
         this.latestSnapshot = data.snapshot;
         this.notebooksPerFloor = data.room?.notebooks_per_floor ?? 1;
         this.currentQuestion = data.question ?? null;
+        for (const question of data.questions ?? []) {
+            this.availableQuestions.set(question.notebook_id, question);
+        }
+        if (this.currentQuestion) {
+            this.availableQuestions.set(this.currentQuestion.notebook_id, this.currentQuestion);
+        }
         this.answerResult = data.answerResult ?? null;
+        this.rankingEntries = data.rankingEntries ?? [];
         this.answeredNotebooks = data.answeredNotebooks ?? [];
+        this.viewerStatus = data.snapshot?.viewer?.status ?? 'playing';
+        this.spectatorMode = this.viewerStatus !== 'playing';
+        this.spectatorTargetId = data.snapshot?.viewer?.target_user_id ?? null;
         this.doorIsOpen = Boolean(
             data.snapshot?.players?.find(player => player.user_id === data.profile.user_id)
                 ?.door_open
@@ -108,14 +125,16 @@ class TopDownScene extends Phaser.Scene {
         } else {
             this.controlsEnabled = false;
         }
+        this.baseCameraZoom = Math.min(
+            this.scale.width / WORLD_SIZE,
+            this.scale.height / WORLD_SIZE
+        );
+        this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+        this.cameras.main.setZoom(this.baseCameraZoom);
         this.ready = true;
         this.applySnapshot(this.latestSnapshot);
         for (const movement of this.pendingMovements.values()) this.updatePlayer(movement);
         this.pendingMovements.clear();
-        this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
-        this.cameras.main.setZoom(
-            Math.min(this.scale.width / WORLD_SIZE, this.scale.height / WORLD_SIZE)
-        );
         this.interactionHint = this.add
             .text(this.scale.width / 2, this.scale.height - 18, '', {
                 backgroundColor: '#172226',
@@ -189,6 +208,80 @@ class TopDownScene extends Phaser.Scene {
         this.setDoorFrameSet(3);
     }
 
+    updateRanking(entries) {
+        this.rankingEntries = entries;
+    }
+
+    setSpectatorMode({ status = 'eliminated', targetUserId = null } = {}) {
+        this.viewerStatus = status;
+        this.spectatorMode = true;
+        this.spectatorTargetId = targetUserId;
+        this.controlsEnabled = false;
+        this.questionState = 'closed';
+        this.currentQuestion = null;
+        this.answerResult = null;
+        this.clearQuestionMenu();
+        this.updateViewerHud();
+        this.focusSpectatorTarget();
+    }
+
+    setSpectatorTarget(targetUserId) {
+        this.spectatorTargetId = targetUserId;
+        this.pendingSpectatorTargetId = null;
+        this.focusSpectatorTarget();
+    }
+
+    focusSpectatorTarget() {
+        if (!this.spectatorMode) return;
+        const camera = this.cameras.main;
+        if (!this.spectatorTargetId) {
+            camera.stopFollow();
+            camera.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+            camera.setZoom(this.baseCameraZoom);
+            return;
+        }
+        const targetView = this.players.get(this.spectatorTargetId);
+        if (!targetView) return;
+
+        const zoom = this.baseCameraZoom * (MAP_SIZE / SPECTATOR_VIEW_TILES);
+        const halfViewSize = WORLD_SIZE / (2 * (MAP_SIZE / SPECTATOR_VIEW_TILES));
+        camera.stopFollow();
+        camera.setBounds(
+            -halfViewSize,
+            -halfViewSize,
+            WORLD_SIZE + halfViewSize * 2,
+            WORLD_SIZE + halfViewSize * 2
+        );
+        camera.setZoom(zoom);
+        camera.startFollow(targetView.sprite, true, 1, 1);
+    }
+
+    moveSpectatorTarget(direction) {
+        const targets = this.rankingEntries.filter(
+            entry => entry.status === 'playing' && entry.user_id !== this.profile.user_id
+        );
+        if (targets.length === 0 || !this.client) return;
+
+        const currentIndex = targets.findIndex(
+            entry => entry.user_id === (this.pendingSpectatorTargetId ?? this.spectatorTargetId)
+        );
+        const nextIndex =
+            currentIndex === -1
+                ? direction > 0
+                    ? 0
+                    : targets.length - 1
+                : (currentIndex + direction + targets.length) % targets.length;
+        const targetUserId = targets[nextIndex].user_id;
+        if (targetUserId === this.spectatorTargetId) return;
+
+        this.pendingSpectatorTargetId = targetUserId;
+        this.client.followSpectator(targetUserId).catch(error => {
+            if (this.pendingSpectatorTargetId !== targetUserId) return;
+            this.pendingSpectatorTargetId = null;
+            this.onSpectatorError?.(error.message || 'ERRO AO TROCAR JOGADOR');
+        });
+    }
+
     createAnimations() {
         for (const characterId of CHARACTER_IDS) {
             const animationKey = `${characterId}-walk`;
@@ -206,6 +299,13 @@ class TopDownScene extends Phaser.Scene {
     applySnapshot(snapshot) {
         if (!snapshot?.players) return;
         this.latestSnapshot = snapshot;
+        if (snapshot.viewer) {
+            this.viewerStatus = snapshot.viewer.status;
+            this.spectatorMode = snapshot.viewer.status !== 'playing';
+            this.spectatorTargetId = snapshot.viewer.target_user_id;
+            if (this.spectatorMode) this.controlsEnabled = false;
+        }
+        this.updateViewerHud();
         if (!this.ready) return;
         const visibleIds = new Set(snapshot.players.map(player => player.user_id));
         for (const [userId, view] of this.players) {
@@ -216,6 +316,7 @@ class TopDownScene extends Phaser.Scene {
             }
         }
         for (const player of snapshot.players) this.updatePlayer(player);
+        this.focusSpectatorTarget();
         this.updateHud(snapshot);
     }
 
@@ -234,11 +335,16 @@ class TopDownScene extends Phaser.Scene {
         if (isLocal) {
             const previousFloor = this.localPlayer?.floor;
             this.localPlayer = player;
+            this.viewerStatus = player.status;
+            this.spectatorMode = player.status === 'eliminated' || player.status === 'finished';
+            this.controlsEnabled = !this.spectatorMode;
             if (Array.isArray(player.answered_notebooks)) {
                 this.answeredNotebooks = player.answered_notebooks;
             }
             if (previousFloor !== undefined && player.floor !== previousFloor) {
                 this.answeredNotebooks = [];
+                this.availableQuestions.clear();
+                this.currentQuestion = null;
                 this.closeDoor();
             }
             if (player.door_open && !this.doorIsOpen) this.openDoor();
@@ -263,15 +369,18 @@ class TopDownScene extends Phaser.Scene {
                 .setOrigin(0.5)
                 .setPadding(4, 2, 4, 2)
                 .setDepth(10001);
-            view = { sprite, label, characterId };
+            view = { sprite, label, characterId, nickname };
             this.players.set(player.user_id, view);
-            if (isLocal) this.cameras.main.startFollow(sprite, true, 0.08, 0.08);
+            if (isLocal && !this.spectatorMode) {
+                this.cameras.main.startFollow(sprite, true, 0.08, 0.08);
+            }
         }
         if (view.characterId !== characterId) {
             view.sprite.setTexture(characterId, 0);
             view.characterId = characterId;
         }
         view.label.setText(nickname);
+        view.nickname = nickname;
         view.sprite.setPosition(logicalToWorld(player.x), logicalToWorld(player.y));
         view.label.setPosition(view.sprite.x, view.sprite.y - 28);
         view.sprite.setDepth(10000);
@@ -290,25 +399,35 @@ class TopDownScene extends Phaser.Scene {
             view.sprite.setFlipX(false);
         }
         view.sprite.setAlpha(player.status === 'eliminated' ? 0.45 : 1);
+        const hiddenLocalAvatar =
+            isLocal && (player.status === 'eliminated' || player.status === 'finished');
+        view.sprite.setVisible(!hiddenLocalAvatar);
+        view.label.setVisible(!hiddenLocalAvatar);
         const animationKey = `${view.characterId}-walk`;
         if (player.status === 'eliminated' || player.direction === 'stop') {
             view.sprite.stop();
             view.sprite.setFrame(0);
         } else if (this.anims.exists(animationKey)) view.sprite.play(animationKey, true);
-        if (isLocal) this.controlsEnabled = player.status !== 'eliminated';
+        if (this.spectatorMode && player.user_id === this.spectatorTargetId) {
+            this.focusSpectatorTarget();
+        }
     }
 
     showQuestion(question) {
-        if (this.questionState === 'feedback' || this.questionState === 'submitting') {
-            this.nextQuestion = question;
-            return;
+        if (this.spectatorMode) return;
+        if (
+            this.availableQuestions.size > 0 &&
+            this.availableQuestions.values().next().value.floor !== question.floor
+        ) {
+            this.availableQuestions.clear();
         }
-
-        this.currentQuestion = question;
+        this.availableQuestions.set(question.notebook_id, question);
+        if (this.questionState === 'closed') this.currentQuestion = this.getNearbyQuestion();
         this.updateInteractionHint();
     }
 
     showAnswerResult(result) {
+        if (this.spectatorMode) return;
         if (result.question_id !== this.currentQuestion?.question_id) return;
         this.answeredNotebooks = [
             ...this.answeredNotebooks.filter(
@@ -324,14 +443,13 @@ class TopDownScene extends Phaser.Scene {
         this.questionError = null;
         if (result.correct) {
             this.currentQuestion = null;
-            this.nextQuestion = null;
+            this.availableQuestions.clear();
             this.questionState = 'closed';
             this.clearQuestionMenu();
             this.updateInteractionHint();
             return;
         }
         this.questionState = 'feedback';
-        this.nextQuestion = null;
         this.renderQuestionMenu();
     }
 
@@ -346,14 +464,23 @@ class TopDownScene extends Phaser.Scene {
     }
 
     isNearCurrentNotebook() {
+        return Boolean(this.getNearbyQuestion());
+    }
+
+    getNearbyQuestion() {
+        if (this.localPlayer?.status === 'eliminated' || this.doorIsOpen) return null;
         return (
-            this.localPlayer?.status !== 'eliminated' &&
-            this.currentQuestion &&
-            isNearTile(
-                this.localPlayer,
-                this.currentQuestion.notebook_position,
-                NOTEBOOK_INTERACTION_RANGE
-            )
+            [...this.availableQuestions.values()].find(
+                question =>
+                    !this.answeredNotebooks.some(
+                        notebook => notebook.notebook_id === question.notebook_id
+                    ) &&
+                    isNearTile(
+                        this.localPlayer,
+                        question.notebook_position,
+                        NOTEBOOK_INTERACTION_RANGE
+                    )
+            ) ?? null
         );
     }
 
@@ -377,10 +504,10 @@ class TopDownScene extends Phaser.Scene {
         if (!this.interactionHint) return;
         const visible = this.questionState === 'closed';
         let hint = '';
-        if (visible && this.controlsEnabled && this.getNearbyAnsweredNotebook()) {
-            hint = 'YOU ALREADY ANSWERED THIS NOTEBOOK';
-        } else if (visible && this.controlsEnabled && this.isNearCurrentNotebook()) {
+        if (visible && this.controlsEnabled && this.isNearCurrentNotebook()) {
             hint = 'PRESS E TO INTERACT';
+        } else if (visible && this.controlsEnabled && this.getNearbyAnsweredNotebook()) {
+            hint = 'YOU ALREADY ANSWERED THIS NOTEBOOK';
         } else if (visible && this.controlsEnabled && this.doorIsOpen && this.isNearDoor()) {
             hint = 'DOOR OPEN — WALK THROUGH';
         }
@@ -392,6 +519,19 @@ class TopDownScene extends Phaser.Scene {
     }
 
     openQuestionMenu() {
+        const availableQuestion = this.getNearbyQuestion();
+        if (availableQuestion) {
+            this.currentQuestion = availableQuestion;
+            this.questionState = 'question';
+            this.selectedQuestionItem = 0;
+            this.answerResult = null;
+            this.questionError = null;
+            this.renderQuestionMenu();
+            if (this.lastDirection !== 'stop') this.sendMovement('stop');
+            this.updateInteractionHint();
+            return;
+        }
+
         const answeredNotebook = this.getNearbyAnsweredNotebook();
         if (answeredNotebook) {
             this.noticeText = `YOU ALREADY ANSWERED NOTEBOOK ${answeredNotebook.notebook_label}.`;
@@ -399,14 +539,6 @@ class TopDownScene extends Phaser.Scene {
             this.renderQuestionMenu();
             return;
         }
-        if (!this.currentQuestion || !this.isNearCurrentNotebook()) return;
-        this.questionState = 'question';
-        this.selectedQuestionItem = 0;
-        this.answerResult = null;
-        this.questionError = null;
-        this.renderQuestionMenu();
-        if (this.lastDirection !== 'stop') this.sendMovement('stop');
-        this.updateInteractionHint();
     }
 
     closeQuestionMenu() {
@@ -416,8 +548,7 @@ class TopDownScene extends Phaser.Scene {
         this.questionError = null;
         this.noticeText = '';
         if (wasFeedback) {
-            this.currentQuestion = this.nextQuestion;
-            this.nextQuestion = null;
+            this.currentQuestion = null;
         }
         this.clearQuestionMenu();
         this.updateInteractionHint();
@@ -715,19 +846,45 @@ class TopDownScene extends Phaser.Scene {
         if (!localPlayer) return;
         this.onHudUpdate?.({
             floor: localPlayer.floor,
-            status: localPlayer.status === 'eliminated' ? 'SPECTATOR' : 'PLAYING'
+            status:
+                localPlayer.status === 'finished'
+                    ? 'FINISHED'
+                    : localPlayer.status === 'eliminated'
+                      ? 'SPECTATOR'
+                      : 'PLAYING'
+        });
+    }
+
+    updateViewerHud() {
+        if (!this.spectatorMode) return;
+        this.onHudUpdate?.({
+            floor: this.localPlayer?.floor ?? 1,
+            status: this.viewerStatus === 'finished' ? 'FINISHED' : 'SPECTATOR'
         });
     }
 
     resizeCamera(gameSize) {
-        this.cameras.main.setZoom(
-            Math.min(gameSize.width / WORLD_SIZE, gameSize.height / WORLD_SIZE)
-        );
+        this.baseCameraZoom = Math.min(gameSize.width / WORLD_SIZE, gameSize.height / WORLD_SIZE);
+        if (this.spectatorMode) this.focusSpectatorTarget();
+        else {
+            this.cameras.main.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+            this.cameras.main.setZoom(this.baseCameraZoom);
+        }
         this.interactionHint?.setPosition(gameSize.width / 2, gameSize.height - 18);
         if (this.questionState !== 'closed') this.renderQuestionMenu();
     }
 
     update(time) {
+        if (this.spectatorMode) {
+            const justDown = Phaser.Input.Keyboard.JustDown;
+            if (this.cursors?.left && justDown(this.cursors.left)) {
+                this.moveSpectatorTarget(-1);
+            } else if (this.cursors?.right && justDown(this.cursors.right)) {
+                this.moveSpectatorTarget(1);
+            }
+            return;
+        }
+
         if (this.questionState !== 'closed') {
             const justDown = Phaser.Input.Keyboard.JustDown;
             if (
@@ -794,10 +951,13 @@ export function createTopDownGame({
     snapshot,
     room,
     question,
+    questions,
     answerResult,
-    onHudUpdate
+    rankingEntries,
+    onHudUpdate,
+    onSpectatorError
 }) {
-    const scene = new TopDownScene(onHudUpdate);
+    const scene = new TopDownScene(onHudUpdate, onSpectatorError);
     root.replaceChildren();
     const game = new Phaser.Game({
         type: Phaser.CANVAS,
@@ -815,13 +975,25 @@ export function createTopDownGame({
         },
         scene
     });
-    game.scene.start('top-down-scene', { client, profile, snapshot, room, question, answerResult });
+    game.scene.start('top-down-scene', {
+        client,
+        profile,
+        snapshot,
+        room,
+        question,
+        questions,
+        answerResult,
+        rankingEntries
+    });
     return {
         game,
         applySnapshot: snapshotValue => scene.applySnapshot(snapshotValue),
         updateMovement: movement => scene.updatePlayer(movement),
+        updateRanking: entries => scene.updateRanking(entries),
         showQuestion: questionValue => scene.showQuestion(questionValue),
         showAnswerResult: result => scene.showAnswerResult(result),
+        setSpectatorMode: options => scene.setSpectatorMode(options),
+        setSpectatorTarget: targetUserId => scene.setSpectatorTarget(targetUserId),
         destroy() {
             scene.destroyScene();
             game.destroy(true);

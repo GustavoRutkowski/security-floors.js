@@ -2,12 +2,32 @@ import { createTopDownGame } from './game-scene.js';
 import { DEFAULT_CHARACTER_ID, getCharacter } from '../../services/character-catalog.js';
 import { getCharacterSpriteUrl } from '../../services/character-assets.js';
 
+const SPECTATOR_HINT = 'USE ← / → PARA TROCAR DE JOGADOR';
+
 export function createGameFeature({ documentRef = document } = {}) {
     const gameRoot = documentRef.getElementById('game-root');
+    const spectatorHud = documentRef.getElementById('spectator-hud');
+    const spectatorTarget = documentRef.getElementById('spectator-target');
+    const spectatorControls = documentRef.getElementById('spectator-controls');
     let topDownGame;
     let timerInterval;
     let currentQuestion;
+    let presentedQuestions = new Map();
     let answerResult;
+    let rankingEntries = [];
+    let spectatorStatus = 'playing';
+    let spectatorTargetUserId = null;
+
+    function renderSpectatorHud() {
+        const watching = spectatorStatus !== 'playing';
+        spectatorHud.hidden = !watching;
+        if (!watching) return;
+
+        const target = rankingEntries.find(entry => entry.user_id === spectatorTargetUserId);
+        spectatorTarget.textContent = spectatorTargetUserId
+            ? `ESPECTANDO: ${target?.nickname ?? spectatorTargetUserId}`
+            : 'NENHUM JOGADOR ATIVO';
+    }
 
     function renderProfile(profile) {
         if (!profile) return;
@@ -33,6 +53,8 @@ export function createGameFeature({ documentRef = document } = {}) {
     }
 
     function updateRanking(entries = []) {
+        rankingEntries = entries;
+        renderSpectatorHud();
         const list = documentRef.getElementById('ranking-list');
         documentRef.getElementById('ranking-count').textContent = String(entries.length).padStart(
             2,
@@ -62,21 +84,33 @@ export function createGameFeature({ documentRef = document } = {}) {
             row.append(rank, nickname, floor);
             list.append(row);
         }
+        topDownGame?.updateRanking(entries);
     }
 
     function hide() {
         topDownGame?.destroy();
         topDownGame = undefined;
         currentQuestion = undefined;
+        presentedQuestions = new Map();
         answerResult = undefined;
+        rankingEntries = [];
+        spectatorStatus = 'playing';
+        spectatorTargetUserId = null;
+        spectatorHud.hidden = true;
+        spectatorControls.textContent = SPECTATOR_HINT;
         globalThis.clearInterval(timerInterval);
         timerInterval = undefined;
     }
 
     function show({ snapshot, client, profile, room, deadline }) {
+        if (snapshot?.viewer) {
+            spectatorStatus = snapshot.viewer.status;
+            spectatorTargetUserId = snapshot.viewer.target_user_id;
+        }
+        renderSpectatorHud();
         renderProfile(profile);
         renderTimer(deadline, room?.time_limit_seconds);
-        updateRanking(snapshot?.entries);
+        if (snapshot?.entries) updateRanking(snapshot.entries);
         if (timerInterval === undefined && room?.time_limit_seconds != null) {
             timerInterval = globalThis.setInterval(
                 () => renderTimer(deadline, room.time_limit_seconds),
@@ -95,13 +129,18 @@ export function createGameFeature({ documentRef = document } = {}) {
             snapshot,
             room,
             question: currentQuestion,
+            questions: [...presentedQuestions.values()],
             answerResult,
+            rankingEntries,
             onHudUpdate: ({ floor, status }) => {
                 documentRef.getElementById('game-floor').textContent = String(floor).padStart(
                     2,
                     '0'
                 );
                 documentRef.getElementById('game-player-status').textContent = status;
+            },
+            onSpectatorError: message => {
+                spectatorControls.textContent = message;
             }
         });
     }
@@ -112,6 +151,11 @@ export function createGameFeature({ documentRef = document } = {}) {
 
     function showQuestion(question) {
         currentQuestion = question;
+        if (presentedQuestions.size > 0 && !presentedQuestions.has(question.notebook_id)) {
+            const currentFloor = presentedQuestions.values().next().value.floor;
+            if (currentFloor !== question.floor) presentedQuestions.clear();
+        }
+        presentedQuestions.set(question.notebook_id, question);
         answerResult = undefined;
         topDownGame?.showQuestion(question);
     }
@@ -125,10 +169,19 @@ export function createGameFeature({ documentRef = document } = {}) {
         topDownGame?.showDoorOpened(event);
     }
 
-    function showSpectatorNote(message) {
-        const note = documentRef.getElementById('spectator-note');
-        note.textContent = message;
-        note.hidden = false;
+    function setSpectatorMode(options) {
+        spectatorStatus = options.status;
+        spectatorTargetUserId = options.targetUserId;
+        spectatorControls.textContent = SPECTATOR_HINT;
+        renderSpectatorHud();
+        topDownGame?.setSpectatorMode(options);
+    }
+
+    function setSpectatorTarget(targetUserId) {
+        spectatorTargetUserId = targetUserId;
+        spectatorControls.textContent = SPECTATOR_HINT;
+        renderSpectatorHud();
+        topDownGame?.setSpectatorTarget(targetUserId);
     }
 
     return {
@@ -139,6 +192,7 @@ export function createGameFeature({ documentRef = document } = {}) {
         showQuestion,
         showAnswerResult,
         showDoorOpened,
-        showSpectatorNote
+        setSpectatorMode,
+        setSpectatorTarget
     };
 }

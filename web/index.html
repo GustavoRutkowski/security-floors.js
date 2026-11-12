@@ -290,7 +290,6 @@
                         </div>
                     </form>
 
-                    <p id="spectator-note" class="lobby-spectator-note" hidden></p>
                     <div class="lobby-footer">
                         <p id="lobby-message" class="home-status">SALA PRONTA</p>
                         <button id="leave-room" class="secondary-button" type="button">
@@ -314,7 +313,21 @@
                 </aside>
 
                 <section class="game-panel" aria-label="Campo da partida">
-                    <div id="game-root" class="game-root" aria-label="Mapa da partida"></div>
+                    <div class="game-stage">
+                        <div id="game-root" class="game-root" aria-label="Mapa da partida"></div>
+                        <div id="spectator-hud" class="spectator-hud" hidden aria-live="polite">
+                            <p id="spectator-target" class="spectator-target">
+                                NENHUM JOGADOR ATIVO
+                            </p>
+                            <p id="spectator-controls" class="spectator-controls">
+                                USE ← / → PARA TROCAR DE JOGADOR
+                            </p>
+                            <div class="spectator-keys" aria-hidden="true">
+                                <kbd>←</kbd>
+                                <kbd>→</kbd>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <aside class="game-sidebar" aria-label="Placar da partida">

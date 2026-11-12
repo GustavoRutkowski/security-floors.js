@@ -91,7 +91,6 @@ describe('match question distribution', () => {
             floor: 1,
             floorReachedAt: null,
             floorReachedOrder: 0,
-            notebookIndex: 0,
             answeredNotebooks: [],
             status: 'playing',
             doorOpen: false,

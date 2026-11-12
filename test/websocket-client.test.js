@@ -211,4 +211,45 @@ describe('browser WebSocket client', () => {
             true
         );
     });
+
+    it('validates spectator target and viewer snapshot metadata', () => {
+        assert.equal(
+            validateEvent({
+                type: 'spectator.started',
+                payload: {
+                    user_id: profile.user_id,
+                    target_user_id: null,
+                    reason: 'run_finished'
+                }
+            }),
+            true
+        );
+        assert.equal(
+            validateEvent({
+                type: 'spectator.following',
+                payload: { target_user_id: 'not-a-uuid' }
+            }),
+            false
+        );
+        assert.equal(
+            validateEvent({
+                type: 'match.snapshot',
+                payload: {
+                    viewer: { status: 'finished', target_user_id: null },
+                    players: []
+                }
+            }),
+            true
+        );
+        assert.equal(
+            validateEvent({
+                type: 'match.snapshot',
+                payload: {
+                    viewer: { status: 'unknown', target_user_id: null },
+                    players: []
+                }
+            }),
+            false
+        );
+    });
 });

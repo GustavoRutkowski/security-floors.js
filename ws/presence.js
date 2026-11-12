@@ -266,10 +266,6 @@ export function returnMatchParticipantsToLobby(state, roomId) {
 
 export function setPlayerSpectating(state, roomId, userId, targetUserId) {
     const room = getRoom(state, roomId);
-    if (room.mode !== 'deathmatch') {
-        throw new Error('Spectating is only available after elimination in deathmatch');
-    }
-
     const player = getPlayer(state, userId);
     if (player.roomId !== roomId || !room.playerIds.has(userId)) {
         throw new Error('Player must belong to the room to spectate');
