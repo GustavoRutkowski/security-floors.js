@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CHARACTERS } from '../../services/character-catalog.js';
 import { getCharacterSpriteUrl } from '../../services/character-assets.js';
+import { getNotebookFrame, TILESET_FRAME, TILESET_TILE_SIZE } from './tileset-layout.js';
 import { getDoorTiles, getTileAt, isNearTile, MAP_SIZE } from '../../../map-layout.js';
 
 const TILE_SIZE = 32;
@@ -69,7 +70,9 @@ class TopDownScene extends Phaser.Scene {
         this.interactionHint = null;
         this.interactionHintText = '';
         this.doorTiles = [];
+        this.notebookTiles = [];
         this.doorIsOpen = false;
+        this.clearAllNotebookSheets = false;
         this.doorAnimationTimer = null;
         this.answeredNotebooks = [];
         this.noticeText = '';
@@ -97,13 +100,14 @@ class TopDownScene extends Phaser.Scene {
             data.snapshot?.players?.find(player => player.user_id === data.profile.user_id)
                 ?.door_open
         );
+        this.clearAllNotebookSheets = this.doorIsOpen;
         this.questionState = this.answerResult ? 'feedback' : 'closed';
     }
 
     preload() {
         this.load.spritesheet(TILESET_KEY, TILESET_URL, {
-            frameWidth: 16,
-            frameHeight: 16
+            frameWidth: TILESET_TILE_SIZE,
+            frameHeight: TILESET_TILE_SIZE
         });
         for (const character of CHARACTERS) {
             this.load.spritesheet(character.id, getCharacterSpriteUrl(character), {
@@ -116,7 +120,7 @@ class TopDownScene extends Phaser.Scene {
     create() {
         this.createMap();
         this.createAnimations();
-        if (this.doorIsOpen) this.setDoorFrameSet(15);
+        if (this.doorIsOpen) this.setDoorFrameSet(TILESET_FRAME.doorOpen);
         if (this.input.keyboard) {
             this.cursors = this.input.keyboard.createCursorKeys();
             this.keys = this.input.keyboard.addKeys('W,A,S,D');
@@ -155,17 +159,24 @@ class TopDownScene extends Phaser.Scene {
         for (let row = 0; row < MAP_SIZE; row += 1) {
             for (let column = 0; column < MAP_SIZE; column += 1) {
                 const tile = getTileAt(this.notebooksPerFloor, row, column);
-                this.addTile(column, row, 0);
-                if (tile.type.name === 'wall') this.addTile(column, row, 1);
-                if (tile.type.name === 'table') this.addTile(column, row, 2);
+                this.addTile(column, row, TILESET_FRAME.floor);
+                if (tile.type.name === 'wall') this.addTile(column, row, TILESET_FRAME.wall);
+                if (tile.type.name === 'table') {
+                    this.notebookTiles.push({
+                        row,
+                        column,
+                        image: this.addTile(column, row, TILESET_FRAME.table)
+                    });
+                }
             }
         }
 
         this.doorTiles = getDoorTiles(this.notebooksPerFloor).map(({ row, column }, index) => ({
             row,
             column,
-            image: this.addTile(column, row, 3 + index, 2)
+            image: this.addTile(column, row, TILESET_FRAME.doorLocked + index, 2)
         }));
+        this.updateNotebookTiles();
     }
 
     addTile(column, row, frame, depth = 0) {
@@ -186,15 +197,31 @@ class TopDownScene extends Phaser.Scene {
         }
     }
 
+    updateNotebookTiles() {
+        const answeredPositions = new Set(
+            this.answeredNotebooks.map(
+                notebook => `${notebook.notebook_position.row}:${notebook.notebook_position.column}`
+            )
+        );
+        for (const tile of this.notebookTiles) {
+            const answered = answeredPositions.has(`${tile.row}:${tile.column}`);
+            tile.image.setFrame(
+                getNotebookFrame({ answered, clearAll: this.clearAllNotebookSheets })
+            );
+        }
+    }
+
     openDoor() {
         if (this.doorAnimationTimer) {
             this.doorAnimationTimer.remove();
             this.doorAnimationTimer = null;
         }
         this.doorIsOpen = true;
-        this.setDoorFrameSet(9);
+        this.clearAllNotebookSheets = true;
+        this.updateNotebookTiles();
+        this.setDoorFrameSet(TILESET_FRAME.doorMid);
         this.doorAnimationTimer = this.time.delayedCall(DOOR_ANIMATION_STAGE_MS, () => {
-            this.setDoorFrameSet(15);
+            this.setDoorFrameSet(TILESET_FRAME.doorOpen);
             this.doorAnimationTimer = null;
         });
     }
@@ -205,7 +232,9 @@ class TopDownScene extends Phaser.Scene {
             this.doorAnimationTimer = null;
         }
         this.doorIsOpen = false;
-        this.setDoorFrameSet(3);
+        this.clearAllNotebookSheets = false;
+        this.setDoorFrameSet(TILESET_FRAME.doorLocked);
+        this.updateNotebookTiles();
     }
 
     updateRanking(entries) {
@@ -315,12 +344,14 @@ class TopDownScene extends Phaser.Scene {
                 this.players.delete(userId);
             }
         }
-        for (const player of snapshot.players) this.updatePlayer(player);
+        for (const player of snapshot.players) {
+            this.updatePlayer(player, { fromSnapshot: true });
+        }
         this.focusSpectatorTarget();
         this.updateHud(snapshot);
     }
 
-    updatePlayer(player) {
+    updatePlayer(player, { fromSnapshot = false } = {}) {
         if (!this.ready) {
             this.pendingMovements.set(player.user_id, player);
             return;
@@ -338,15 +369,17 @@ class TopDownScene extends Phaser.Scene {
             this.viewerStatus = player.status;
             this.spectatorMode = player.status === 'eliminated' || player.status === 'finished';
             this.controlsEnabled = !this.spectatorMode;
-            if (Array.isArray(player.answered_notebooks)) {
+            if (fromSnapshot && Array.isArray(player.answered_notebooks)) {
                 this.answeredNotebooks = player.answered_notebooks;
             }
             if (previousFloor !== undefined && player.floor !== previousFloor) {
                 this.answeredNotebooks = [];
+                this.clearAllNotebookSheets = false;
                 this.availableQuestions.clear();
                 this.currentQuestion = null;
                 this.closeDoor();
             }
+            this.updateNotebookTiles();
             if (player.door_open && !this.doorIsOpen) this.openDoor();
         }
         let view = this.players.get(player.user_id);
@@ -439,6 +472,8 @@ class TopDownScene extends Phaser.Scene {
                 notebook_position: result.notebook_position
             }
         ];
+        if (result.correct) this.clearAllNotebookSheets = true;
+        this.updateNotebookTiles();
         this.answerResult = result;
         this.questionError = null;
         if (result.correct) {

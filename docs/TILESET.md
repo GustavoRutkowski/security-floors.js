@@ -128,12 +128,14 @@ parte das matrizes e cada linha deve permanecer com 15 caracteres.
 ## Organização da spritesheet
 
 O arquivo [`web/spritesheets/TILESET.png`](../web/spritesheets/TILESET.png)
-mede 48×112 pixels e contém uma grade de 3 colunas por 7 linhas de tiles de
-16×16 pixels. A ordem dos tiles, da primeira à última linha, é:
+mede 48×128 pixels e contém uma grade de 3 colunas por 8 linhas de tiles de
+16×16 pixels. Os frames são indexados da esquerda para a direita e de cima
+para baixo, começando em zero. A ordem, da primeira à última linha, é:
 
 ```js
 [
-    [FLOOR, WALL, TABLE],
+    [FLOOR, WALL, null],
+    [TABLE, EMPTY_TABLE, null],
     [DOOR_LOCKED_1, DOOR_LOCKED_2, DOOR_LOCKED_3],
     [DOOR_LOCKED_4, DOOR_LOCKED_5, DOOR_LOCKED_6],
     [DOOR_MID_1, DOOR_MID_2, DOOR_MID_3],
@@ -148,14 +150,19 @@ Os nomes representam:
 - `FLOOR`: piso;
 - `WALL`: parede;
 - `TABLE`: caderno;
+- `EMPTY_TABLE`: mesa sem a folha do caderno;
 - `DOOR_LOCKED_1` a `DOOR_LOCKED_6`: porta fechada;
 - `DOOR_MID_1` a `DOOR_MID_6`: porta em abertura;
 - `DOOR_OPEN_1` a `DOOR_OPEN_6`: porta aberta.
 
-Cada estado da porta é formado por seis tiles em uma composição de 3×2,
-totalizando 48×32 pixels. O código lógico `2` da matriz representa essa
-composição inteira; ele não deve ser interpretado como seis células
-independentes nem substituído por seis códigos diferentes no mapa.
+Os índices de frame são: `FLOOR` 0, `WALL` 1, `TABLE` 3, `EMPTY_TABLE` 4,
+porta fechada 6–11, porta em abertura 12–17 e porta aberta 18–23. Quando um
+jogador erra uma questão, somente a mesa daquele caderno passa a usar
+`EMPTY_TABLE`; ao acertar, todas as mesas perdem a folha. Cada estado da porta
+e formado por seis tiles em uma composicao de 3×2, totalizando 48×32 pixels.
+O codigo logico `2` da matriz representa essa composicao inteira; ele nao deve
+ser interpretado como seis celulas independentes nem substituido por seis
+codigos diferentes no mapa.
 
 O estado visual da porta deve acompanhar o estado autoritativo recebido do
 servidor. Ao abrir, a cena anima a composição `DOOR_LOCKED` → `DOOR_MID` →
