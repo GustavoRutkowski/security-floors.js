@@ -22,7 +22,8 @@ Jogo de navegador voltado para o ensino gameficado de princípios de segurança 
 - Um caderno respondido incorretamente fica bloqueado; ao errar todos os cadernos, aguarda 5 segundos até a porta abrir e então precisa atravessá-la
 - Ao atravessar a porta do último andar, você conclui a run e passa a espectador até a partida acabar
 - O ranking fica visível durante todo o jogo: andar mais alto primeiro, com desempate pela ordem de chegada
-- Quando todos os jogadores chegam até o topo (ou o tempo T se encerra), a partida acaba e uma tela com ranking é exibida
+- Quando a partida acaba, o motivo e o ranking são exibidos; confirme para voltar à sala ou aguarde o retorno automático em 8 segundos
+- De volta à sala, o owner pode iniciar outra partida
 
 ## Telas
 

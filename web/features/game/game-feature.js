@@ -3,20 +3,98 @@ import { DEFAULT_CHARACTER_ID, getCharacter } from '../../services/character-cat
 import { getCharacterSpriteUrl } from '../../services/character-assets.js';
 
 const SPECTATOR_HINT = 'USE ← / → PARA TROCAR DE JOGADOR';
+const MATCH_END_REASONS = {
+    all_players_finished: 'TODOS CONCLUÍRAM A RUN',
+    last_player_disconnected: 'VITÓRIA POR DESCONEXÃO DOS ADVERSÁRIOS',
+    last_player_standing: 'ÚLTIMO JOGADOR ATIVO',
+    no_players_remaining: 'NÃO RESTARAM JOGADORES',
+    questions_exhausted: 'TODOS OS COMPETIDORES CONCLUÍRAM',
+    time_limit_reached: 'TEMPO ESGOTADO'
+};
+const RESULTS_TIMEOUT_MS = 8000;
 
 export function createGameFeature({ documentRef = document } = {}) {
     const gameRoot = documentRef.getElementById('game-root');
     const spectatorHud = documentRef.getElementById('spectator-hud');
     const spectatorTarget = documentRef.getElementById('spectator-target');
     const spectatorControls = documentRef.getElementById('spectator-controls');
+    const resultsDialog = documentRef.getElementById('match-results-dialog');
+    const resultsReason = documentRef.getElementById('match-results-reason');
+    const resultsList = documentRef.getElementById('match-results-list');
+    const resultsCountdown = documentRef.getElementById('match-results-countdown');
+    const resultsConfirm = documentRef.getElementById('match-results-confirm');
     let topDownGame;
     let timerInterval;
+    let resultsTimeout;
+    let resultsInterval;
+    let resultsDismissCallback;
+    let resultsOpenedAt;
     let currentQuestion;
     let presentedQuestions = new Map();
     let answerResult;
     let rankingEntries = [];
     let spectatorStatus = 'playing';
     let spectatorTargetUserId = null;
+
+    function dismissResults() {
+        if (!resultsDialog.open) return;
+        globalThis.clearTimeout(resultsTimeout);
+        globalThis.clearInterval(resultsInterval);
+        resultsTimeout = undefined;
+        resultsInterval = undefined;
+        resultsDialog.close();
+        const callback = resultsDismissCallback;
+        resultsDismissCallback = undefined;
+        callback?.();
+    }
+
+    function renderResultsCountdown() {
+        const remainingSeconds = Math.max(
+            0,
+            Math.ceil((RESULTS_TIMEOUT_MS - (Date.now() - resultsOpenedAt)) / 1000)
+        );
+        resultsCountdown.textContent = `VOLTANDO À SALA EM ${remainingSeconds}S`;
+    }
+
+    function showResults({ reason, entries }, onDismiss) {
+        resultsReason.textContent = MATCH_END_REASONS[reason] ?? 'PARTIDA ENCERRADA';
+        resultsList.replaceChildren();
+        for (const entry of entries) {
+            const row = documentRef.createElement('li');
+            row.className = 'match-results-entry';
+
+            const position = documentRef.createElement('span');
+            position.className = 'match-results-position';
+            position.textContent = `#${String(entry.rank).padStart(2, '0')}`;
+
+            const nickname = documentRef.createElement('span');
+            nickname.className = 'match-results-nickname';
+            nickname.textContent = entry.nickname;
+
+            const detail = documentRef.createElement('span');
+            detail.className = 'match-results-detail';
+            detail.textContent = `F${String(entry.floor).padStart(2, '0')} / ${
+                entry.status === 'finished'
+                    ? 'CONCLUÍDO'
+                    : entry.status === 'eliminated'
+                      ? 'ELIMINADO'
+                      : 'EM JOGO'
+            }`;
+
+            row.append(position, nickname, detail);
+            resultsList.append(row);
+        }
+
+        resultsDismissCallback = onDismiss;
+        resultsOpenedAt = Date.now();
+        renderResultsCountdown();
+        resultsDialog.showModal();
+        resultsInterval = globalThis.setInterval(renderResultsCountdown, 1000);
+        resultsTimeout = globalThis.setTimeout(dismissResults, RESULTS_TIMEOUT_MS);
+    }
+
+    resultsConfirm.addEventListener('click', dismissResults);
+    resultsDialog.addEventListener('cancel', event => event.preventDefault());
 
     function renderSpectatorHud() {
         const watching = spectatorStatus !== 'playing';
@@ -193,6 +271,7 @@ export function createGameFeature({ documentRef = document } = {}) {
         showAnswerResult,
         showDoorOpened,
         setSpectatorMode,
-        setSpectatorTarget
+        setSpectatorTarget,
+        showResults
     };
 }

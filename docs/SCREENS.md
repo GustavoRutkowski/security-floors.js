@@ -32,7 +32,7 @@ Alterações de regras e de participantes são transmitidas imediatamente a todo
 ## Jogo Rolando --> GameScreen
 
 Aqui é tudo o jogo em si, partida rolando, movimentação, mecânicas definidas e especificadas em outros documentos, etc...
-No fim da partida todos os players voltam para `RoomScreen`
+Ao fim da partida, um popup mostra o motivo do encerramento e o ranking. O jogador pode confirmar com `OK / VOLTAR À SALA`; se não houver ação, o popup fecha e a sala é exibida automaticamente após 8 segundos. Enquanto o resultado estiver aberto, o snapshot de retorno ao lobby fica retido para não interromper a leitura. Na sala, o owner pode iniciar uma nova partida.
 
 A cena usa um mapa top-down pixelado com câmera acompanhando o jogador local. O cliente envia somente intenções de direção em oito sentidos; posições, sequência aceita e jogadores visíveis são recebidos do servidor por `match.snapshot` e `player.moved`.
 

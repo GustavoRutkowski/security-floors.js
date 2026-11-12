@@ -252,4 +252,40 @@ describe('browser WebSocket client', () => {
             false
         );
     });
+
+    it('validates match results and their ranking entries', () => {
+        const result = {
+            type: 'match.ended',
+            payload: {
+                reason: 'time_limit_reached',
+                entries: [
+                    {
+                        rank: 1,
+                        user_id: profile.user_id,
+                        nickname: profile.nickname,
+                        floor: 3,
+                        status: 'playing'
+                    }
+                ]
+            }
+        };
+        assert.equal(validateEvent(result), true);
+        assert.equal(
+            validateEvent({
+                ...result,
+                payload: {
+                    ...result.payload,
+                    entries: [{ ...result.payload.entries[0], floor: 0 }]
+                }
+            }),
+            false
+        );
+        assert.equal(
+            validateEvent({
+                ...result,
+                payload: { ...result.payload, reason: 'unknown_reason' }
+            }),
+            false
+        );
+    });
 });

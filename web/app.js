@@ -14,6 +14,8 @@ const homeScreen = document.getElementById('home-screen');
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameScreen = document.getElementById('game-screen');
 let websocketClient;
+let matchResultOpen = false;
+let pendingRoomSnapshot;
 
 function renderScreen({ screen }) {
     profileScreen.hidden = screen !== 'profile';
@@ -151,6 +153,15 @@ function connectWebSocket(profile) {
     websocketClient.addEventListener('room.snapshot', event => {
         const snapshot = event.detail.payload;
         if (snapshot.room.status === 'playing') {
+            pendingRoomSnapshot = undefined;
+            state.update({
+                selectedRoomId: snapshot.room.room_id,
+                roomSnapshot: snapshot
+            });
+            return;
+        }
+        if (matchResultOpen) {
+            pendingRoomSnapshot = snapshot;
             state.update({
                 selectedRoomId: snapshot.room.room_id,
                 roomSnapshot: snapshot
@@ -167,6 +178,18 @@ function connectWebSocket(profile) {
     });
     websocketClient.addEventListener('match.snapshot', event => {
         showGame(event.detail.payload);
+    });
+    websocketClient.addEventListener('match.ended', event => {
+        matchResultOpen = true;
+        pendingRoomSnapshot = undefined;
+        gameFeature.showResults(event.detail.payload, () => {
+            matchResultOpen = false;
+            if (pendingRoomSnapshot) {
+                const snapshot = pendingRoomSnapshot;
+                pendingRoomSnapshot = undefined;
+                showLobby(snapshot);
+            }
+        });
     });
     websocketClient.addEventListener('player.moved', event => {
         const movement = event.detail.payload;

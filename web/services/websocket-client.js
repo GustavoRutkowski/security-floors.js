@@ -149,6 +149,33 @@ function validateEvent(message) {
         );
     }
 
+    if (message.type === 'match.ended') {
+        return (
+            [
+                'all_players_finished',
+                'last_player_disconnected',
+                'last_player_standing',
+                'no_players_remaining',
+                'questions_exhausted',
+                'time_limit_reached'
+            ].includes(message.payload.reason) &&
+            Array.isArray(message.payload.entries) &&
+            message.payload.entries.every(
+                entry =>
+                    isRecord(entry) &&
+                    Number.isSafeInteger(entry.rank) &&
+                    entry.rank > 0 &&
+                    typeof entry.user_id === 'string' &&
+                    UUID_PATTERN.test(entry.user_id) &&
+                    typeof entry.nickname === 'string' &&
+                    entry.nickname.trim() !== '' &&
+                    Number.isSafeInteger(entry.floor) &&
+                    entry.floor > 0 &&
+                    ['eliminated', 'finished', 'playing'].includes(entry.status)
+            )
+        );
+    }
+
     return true;
 }
 

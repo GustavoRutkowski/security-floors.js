@@ -44,7 +44,7 @@ Cada caixa abaixo representa **um único commit**. Não agrupe duas tarefas em u
 - [x] **MVP-27** `feat: apply the tileset to the game scene` — Substituir os elementos provisórios pelo tileset documentado em `docs/TILESET.md`, aplicar piso, paredes, pontos de surgimento, cadernos e a composição visual da porta em seus estados. Nesta etapa, cadernos e porta devem ser renderizados no cenário, mas ainda não precisam ter funcionalidade ou interação.
 - [x] **MVP-28** `feat: add the question and notebook interface` — Exibir enunciado e alternativas no canvas, permitir interação somente por teclado, enviar apenas a escolha do jogador, mostrar feedback após avaliação e renderizar a ordem/número de caderno atribuído àquele jogador.
 - [x] **MVP-29** `feat: add spectator and live ranking views` — Mostrar a partida e o ranking em tempo real para espectadores e jogadores sem conceder controles de jogo a espectadores.
-- [ ] **MVP-30** `feat: add game results and rematch flow` — Exibir resultado final, classificação e transição de volta ao lobby, incluindo o fluxo para o owner iniciar outra partida.
+- [x] **MVP-30** `feat: add game results and rematch flow` — Exibir resultado final, classificação e transição de volta ao lobby, incluindo o fluxo para o owner iniciar outra partida.
 - [ ] **MVP-31** `style: complete responsive pixel-art presentation` — Aplicar o estilo retro/pixelado definido em `docs/STYLE.md`, estados de carregamento/vazio/erro e layout utilizável em telas pequenas e grandes.
 
 ## Integração e entrega

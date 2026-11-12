@@ -349,6 +349,29 @@
                 </aside>
             </main>
 
+            <dialog
+                id="match-results-dialog"
+                class="match-results-dialog"
+                aria-labelledby="match-results-title"
+            >
+                <section class="match-results-content">
+                    <p class="eyebrow">MATCH / FINAL</p>
+                    <h2 id="match-results-title">PARTIDA ENCERRADA</h2>
+                    <p id="match-results-reason" class="match-results-reason"></p>
+                    <ol id="match-results-list" class="match-results-list"></ol>
+                    <div class="match-results-actions">
+                        <p
+                            id="match-results-countdown"
+                            class="match-results-countdown"
+                            aria-live="polite"
+                        ></p>
+                        <button id="match-results-confirm" class="primary-button" type="button">
+                            OK / VOLTAR À SALA
+                        </button>
+                    </div>
+                </section>
+            </dialog>
+
             <dialog id="create-room-dialog" class="room-dialog">
                 <form id="create-room-form" method="dialog">
                     <div class="room-dialog-heading">
