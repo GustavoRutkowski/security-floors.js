@@ -6,6 +6,8 @@ export function createGameFeature({ documentRef = document } = {}) {
     const gameRoot = documentRef.getElementById('game-root');
     let topDownGame;
     let timerInterval;
+    let currentQuestion;
+    let answerResult;
 
     function renderProfile(profile) {
         if (!profile) return;
@@ -65,6 +67,8 @@ export function createGameFeature({ documentRef = document } = {}) {
     function hide() {
         topDownGame?.destroy();
         topDownGame = undefined;
+        currentQuestion = undefined;
+        answerResult = undefined;
         globalThis.clearInterval(timerInterval);
         timerInterval = undefined;
     }
@@ -90,6 +94,8 @@ export function createGameFeature({ documentRef = document } = {}) {
             profile,
             snapshot,
             room,
+            question: currentQuestion,
+            answerResult,
             onHudUpdate: ({ floor, status }) => {
                 documentRef.getElementById('game-floor').textContent = String(floor).padStart(
                     2,
@@ -104,11 +110,35 @@ export function createGameFeature({ documentRef = document } = {}) {
         topDownGame?.updateMovement(movement);
     }
 
+    function showQuestion(question) {
+        currentQuestion = question;
+        answerResult = undefined;
+        topDownGame?.showQuestion(question);
+    }
+
+    function showAnswerResult(result) {
+        answerResult = result;
+        topDownGame?.showAnswerResult(result);
+    }
+
+    function showDoorOpened(event) {
+        topDownGame?.showDoorOpened(event);
+    }
+
     function showSpectatorNote(message) {
         const note = documentRef.getElementById('spectator-note');
         note.textContent = message;
         note.hidden = false;
     }
 
-    return { hide, show, updateMovement, updateRanking, showSpectatorNote };
+    return {
+        hide,
+        show,
+        updateMovement,
+        updateRanking,
+        showQuestion,
+        showAnswerResult,
+        showDoorOpened,
+        showSpectatorNote
+    };
 }

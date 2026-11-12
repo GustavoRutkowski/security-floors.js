@@ -181,7 +181,9 @@ function connectWebSocket(profile) {
             x: movement.x,
             y: movement.y,
             direction: movement.direction,
-            floor: player?.floor ?? 1,
+            floor: movement.floor ?? player?.floor ?? 1,
+            door_open: movement.door_open ?? player?.door_open ?? false,
+            answered_notebooks: player?.answered_notebooks ?? [],
             status: player?.status ?? 'playing'
         };
         if (currentMatchSnapshot) {
@@ -193,6 +195,15 @@ function connectWebSocket(profile) {
             });
         }
         gameFeature.updateMovement(updatedPlayer);
+    });
+    websocketClient.addEventListener('question.presented', event => {
+        gameFeature.showQuestion(event.detail.payload);
+    });
+    websocketClient.addEventListener('answer.result', event => {
+        gameFeature.showAnswerResult(event.detail.payload);
+    });
+    websocketClient.addEventListener('door.opened', event => {
+        gameFeature.showDoorOpened(event.detail.payload);
     });
     websocketClient.addEventListener('ranking.updated', event => {
         gameFeature.updateRanking(event.detail.payload.entries);

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { createRoom, deleteRoom, listRooms, updateRoom } from '../db/rooms.js';
+import { getNotebookTiles, isDoorTileAt, LOGICAL_TILE_SIZE, MAP_SIZE } from '../map-layout.js';
 import { createMatchDistribution } from './match-distribution.js';
 import { isMovementDirection, movePosition } from './player-movement.js';
 import {
@@ -86,9 +87,15 @@ function matchSnapshot(roomId, presence, userId) {
     if (!match || !viewer) return null;
 
     const visibleIds = new Set();
+    const viewerProgress = match.progress.get(userId);
     if (viewer.status === 'active') {
         for (const player of presenceSnapshot.players) {
-            if (player.status === 'active') visibleIds.add(player.userId);
+            if (
+                player.status === 'active' &&
+                match.progress.get(player.userId)?.floor === viewerProgress?.floor
+            ) {
+                visibleIds.add(player.userId);
+            }
         }
     } else {
         visibleIds.add(viewer.userId);
@@ -109,6 +116,16 @@ function matchSnapshot(roomId, presence, userId) {
                 y: match.movement.get(player.userId)?.y ?? 50,
                 direction: match.movement.get(player.userId)?.direction ?? 'stop',
                 floor: match.progress.get(player.userId)?.floor ?? 1,
+                door_open:
+                    player.userId === userId
+                        ? (match.progress.get(player.userId)?.doorOpen ?? false)
+                        : false,
+                ...(player.userId === userId
+                    ? {
+                          answered_notebooks:
+                              match.progress.get(player.userId)?.answeredNotebooks ?? []
+                      }
+                    : {}),
                 status: player.status === 'active' ? 'playing' : 'eliminated'
             }))
     };
@@ -570,11 +587,12 @@ function handlePlayerMove(socket, payload, requestId, presence) {
     const roomPresence = presence.rooms.get(player.roomId);
     const match = roomPresence?.match;
     const movement = match?.movement.get(socket.userId);
+    const progress = match?.progress.get(socket.userId);
     if (match && expireMatchIfPastDeadline(match, player.roomId, presence)) {
         sendError(socket, 'ACTION_NOT_ALLOWED', 'O tempo da partida terminou.', requestId);
         return;
     }
-    if (!movement || match.ended) {
+    if (!movement || !progress || match.ended || progress.status === 'finished') {
         sendError(socket, 'ACTION_NOT_ALLOWED', 'A partida não está em andamento.', requestId);
         return;
     }
@@ -589,12 +607,32 @@ function handlePlayerMove(socket, payload, requestId, presence) {
     }
 
     const position = movePosition(movement, payload.direction, {
-        notebooksPerFloor: match.notebooksPerFloor
+        notebooksPerFloor: match.notebooksPerFloor,
+        doorOpen: progress.doorOpen
     });
     Object.assign(movement, position, {
         direction: payload.direction,
         sequence: payload.sequence
     });
+    const enteredDoor = progress.doorOpen && isDoorTileAt(position, match.notebooksPerFloor);
+    if (enteredDoor) {
+        const totalFloors = match.players.get(socket.userId).length;
+        if (progress.floor < totalFloors) {
+            progress.floor += 1;
+            progress.notebookIndex = 0;
+            progress.answeredNotebooks = [];
+            progress.status = 'playing';
+            progress.doorOpen = false;
+            progress.doorOpensAt = null;
+            movement.x = (7 + 0.65) * LOGICAL_TILE_SIZE;
+            movement.y = (MAP_SIZE - 1 + 0.1) * LOGICAL_TILE_SIZE;
+            movement.direction = 'stop';
+            recordFloorArrival(match, progress, presence.nowFn());
+        } else if (match.mode === 'classic') {
+            progress.doorOpen = false;
+            markPlayerFinished(match, progress, presence.nowFn());
+        }
+    }
     match.movementRevision += 1;
 
     const event = {
@@ -605,18 +643,51 @@ function handlePlayerMove(socket, payload, requestId, presence) {
         sequence: movement.sequence,
         direction: movement.direction,
         x: movement.x,
-        y: movement.y
+        y: movement.y,
+        floor: progress.floor,
+        door_open: progress.doorOpen
     };
     const viewerIds = new Set(
         getPlayerViewers(presence, player.roomId, socket.userId).map(viewer => viewer.userId)
     );
     for (const participant of getRoomPresence(presence, player.roomId).players) {
-        if (participant.status === 'active') viewerIds.add(participant.userId);
+        if (
+            participant.status === 'active' &&
+            match.progress.get(participant.userId)?.floor === progress.floor
+        ) {
+            viewerIds.add(participant.userId);
+        }
     }
     for (const viewerId of viewerIds) {
         const connection = presence.connections.get(viewerId);
         if (connection) send(connection, 'player.moved', event);
     }
+
+    if (enteredDoor) sendMatchSnapshot(null, player.roomId, presence);
+
+    if (enteredDoor && progress.status === 'playing') {
+        const connection = presence.connections.get(socket.userId);
+        if (connection) sendCurrentQuestion(connection, match, socket.userId, progress);
+        broadcastRanking(player.roomId, presence);
+    } else if (enteredDoor && progress.status === 'finished') {
+        finishClassicIfReady(match, player.roomId, presence);
+        if (!match.ended && match.mode === 'deathmatch') {
+            finishMatch({
+                roomId: player.roomId,
+                presence,
+                winnerUserId: socket.userId,
+                reason: 'questions_exhausted'
+            });
+        }
+    }
+}
+
+function getNotebookPosition(match, progress, notebook) {
+    const originalFloor = match.floors.find(candidate => candidate.floor === progress.floor);
+    const tileIndex = originalFloor?.notebooks.findIndex(
+        candidate => candidate.notebookId === notebook.notebookId
+    );
+    return tileIndex >= 0 ? getNotebookTiles(match.notebooksPerFloor)[tileIndex] : null;
 }
 
 function sendCurrentQuestion(socket, match, userId, progress) {
@@ -626,19 +697,22 @@ function sendCurrentQuestion(socket, match, userId, progress) {
     const notebook = floor?.notebooks[progress.notebookIndex];
     const question = notebook && match.questions.get(notebook.questionId);
     if (!notebook || !question) return false;
+    const notebookPosition = getNotebookPosition(match, progress, notebook);
+    if (!notebookPosition) return false;
 
     send(socket, 'question.presented', {
         question_id: question.id,
         floor: progress.floor,
         notebook_id: notebook.notebookId,
         notebook_label: notebook.notebookLabel,
+        notebook_position: notebookPosition,
         prompt: question.prompt,
         options: [...question.options]
     });
     return true;
 }
 
-function openNextClassicFloor({ match, progress, roomId, userId, presence }) {
+function openClassicDoor({ match, progress, roomId, userId, presence }) {
     if (expireMatchIfPastDeadline(match, roomId, presence)) return;
 
     const roomPresence = presence.rooms.get(roomId);
@@ -652,20 +726,17 @@ function openNextClassicFloor({ match, progress, roomId, userId, presence }) {
 
     progress.doorTimer = null;
     progress.doorOpensAt = null;
-    progress.floor += 1;
-    progress.notebookIndex = 0;
+    progress.status = 'door_open';
+    progress.doorOpen = true;
     const player = presence.players.get(userId);
-    if (progress.floor > match.players.get(userId).length) {
-        markPlayerFinished(match, progress, presence.nowFn());
-        finishClassicIfReady(match, roomId, presence);
-        return;
-    }
-
-    progress.status = 'playing';
-    recordFloorArrival(match, progress, presence.nowFn());
     const connection = presence.connections.get(userId);
-    if (player?.connected && connection) sendCurrentQuestion(connection, match, userId, progress);
-    broadcastRanking(roomId, presence);
+    if (player?.connected && connection) {
+        send(connection, 'door.opened', {
+            floor: progress.floor,
+            reason: 'all_notebooks_answered'
+        });
+        sendMatchSnapshot(null, roomId, presence);
+    }
 }
 
 function handleQuestionAnswer(socket, payload, requestId, database, presence) {
@@ -752,8 +823,16 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
     }
 
     const correct = payload.option_index === question.correct_option_index;
+    const notebookPosition = getNotebookPosition(match, progress, notebook);
+    const answeredNotebook = {
+        notebook_id: notebook.notebookId,
+        notebook_label: notebook.notebookLabel,
+        notebook_position: notebookPosition
+    };
+    progress.answeredNotebooks.push(answeredNotebook);
     const result = {
         question_id: question.id,
+        ...answeredNotebook,
         correct,
         correct_option_index: question.correct_option_index,
         explanation: question.explanation,
@@ -762,11 +841,13 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
 
     if (room.mode === 'deathmatch') {
         if (correct) {
-            progress.floor += 1;
             progress.notebookIndex = 0;
-            if (progress.floor > match.players.get(socket.userId).length) {
+            if (progress.floor >= match.players.get(socket.userId).length) {
+                progress.doorOpen = true;
                 markPlayerFinished(match, progress, presence.nowFn());
+                result.door_open = true;
                 send(socket, 'answer.result', result, requestId);
+                send(socket, 'door.opened', { floor: progress.floor, reason: 'correct_answer' });
                 finishMatch({
                     roomId: player.roomId,
                     presence,
@@ -774,10 +855,15 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
                     reason: 'questions_exhausted'
                 });
             } else {
-                recordFloorArrival(match, progress, presence.nowFn());
+                progress.status = 'door_open';
+                progress.doorOpen = true;
+                result.door_open = true;
                 send(socket, 'answer.result', result, requestId);
-                sendCurrentQuestion(socket, match, socket.userId, progress);
-                broadcastRanking(player.roomId, presence);
+                send(socket, 'door.opened', {
+                    floor: progress.floor,
+                    reason: 'correct_answer'
+                });
+                sendMatchSnapshot(null, player.roomId, presence);
             }
             return;
         }
@@ -811,15 +897,24 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
     }
 
     if (correct) {
-        progress.floor += 1;
-        progress.notebookIndex = 0;
-        if (progress.floor > match.players.get(socket.userId).length) {
+        if (progress.floor >= match.players.get(socket.userId).length) {
+            progress.doorOpen = true;
             markPlayerFinished(match, progress, presence.nowFn());
-        } else {
-            recordFloorArrival(match, progress, presence.nowFn());
+            result.door_open = true;
             send(socket, 'answer.result', result, requestId);
-            sendCurrentQuestion(socket, match, socket.userId, progress);
-            broadcastRanking(player.roomId, presence);
+            send(socket, 'door.opened', { floor: progress.floor, reason: 'correct_answer' });
+            sendMatchSnapshot(null, player.roomId, presence);
+            finishClassicIfReady(match, player.roomId, presence);
+            if (!match.ended) broadcastRanking(player.roomId, presence);
+            return;
+        } else {
+            progress.notebookIndex = 0;
+            progress.status = 'door_open';
+            progress.doorOpen = true;
+            result.door_open = true;
+            send(socket, 'answer.result', result, requestId);
+            send(socket, 'door.opened', { floor: progress.floor, reason: 'correct_answer' });
+            sendMatchSnapshot(null, player.roomId, presence);
             return;
         }
     } else {
@@ -834,7 +929,7 @@ function handleQuestionAnswer(socket, payload, requestId, database, presence) {
         progress.doorOpensAt = presence.nowFn() + CLASSIC_DOOR_WAIT_MS;
         progress.doorTimer = presence.setTimeoutFn(
             () =>
-                openNextClassicFloor({
+                openClassicDoor({
                     match,
                     progress,
                     roomId: player.roomId,
@@ -1152,6 +1247,15 @@ function handleRoomConfigure(socket, payload, requestId, server, database, prese
         sendError(socket, 'ROOM_NOT_FOUND', 'A sala não existe ou já foi removida.', requestId);
         return;
     }
+    if (room.notebooks_per_floor > 4) {
+        sendError(
+            socket,
+            'INVALID_ROOM_SETTINGS',
+            'O mapa oferece suporte a no máximo quatro cadernos por andar. Atualize a configuração da sala.',
+            requestId
+        );
+        return;
+    }
     if (room.owner_id !== socket.userId) {
         sendError(socket, 'NOT_ROOM_OWNER', 'Somente o owner pode alterar a sala.', requestId);
         return;
@@ -1210,6 +1314,15 @@ function handleMatchStart(socket, payload, requestId, server, database, presence
     }
     if (room.owner_id !== socket.userId) {
         sendError(socket, 'NOT_ROOM_OWNER', 'Somente o owner pode iniciar a partida.', requestId);
+        return;
+    }
+    if (room.notebooks_per_floor > 4) {
+        sendError(
+            socket,
+            'INVALID_ROOM_SETTINGS',
+            'O mapa oferece suporte a no máximo quatro cadernos por andar. Atualize a configuração da sala.',
+            requestId
+        );
         return;
     }
     if (room.status !== 'waiting') {

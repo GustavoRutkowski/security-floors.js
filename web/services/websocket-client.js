@@ -1,3 +1,5 @@
+import { MAP_SIZE } from '../../map-layout.js';
+
 const PROTOCOL_VERSION = 1;
 const DEFAULT_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
@@ -14,6 +16,7 @@ const EVENT_TYPES = new Set([
     'spectator.started',
     'spectator.following',
     'question.presented',
+    'door.opened',
     'player.moved',
     'answer.result',
     'ranking.updated',
@@ -48,12 +51,63 @@ function validateEvent(message) {
     }
 
     if (message.type === 'question.presented') {
+        const { notebook_position: position, options } = message.payload;
         return (
             Number.isSafeInteger(message.payload.question_id) &&
-            Array.isArray(message.payload.options) &&
+            message.payload.question_id > 0 &&
+            Number.isSafeInteger(message.payload.floor) &&
+            message.payload.floor > 0 &&
+            typeof message.payload.notebook_id === 'string' &&
+            Number.isSafeInteger(message.payload.notebook_label) &&
+            message.payload.notebook_label > 0 &&
+            isRecord(position) &&
+            Number.isSafeInteger(position.row) &&
+            position.row >= 0 &&
+            position.row < MAP_SIZE &&
+            Number.isSafeInteger(position.column) &&
+            position.column >= 0 &&
+            position.column < MAP_SIZE &&
+            Array.isArray(options) &&
+            options.length >= 2 &&
+            options.every(option => typeof option === 'string' && option.trim() !== '') &&
             typeof message.payload.prompt === 'string' &&
+            message.payload.prompt.trim() !== '' &&
             !Object.hasOwn(message.payload, 'correct_option_index') &&
             !Object.hasOwn(message.payload, 'explanation')
+        );
+    }
+
+    if (message.type === 'answer.result') {
+        return (
+            Number.isSafeInteger(message.payload.question_id) &&
+            message.payload.question_id > 0 &&
+            typeof message.payload.notebook_id === 'string' &&
+            Number.isSafeInteger(message.payload.notebook_label) &&
+            message.payload.notebook_label > 0 &&
+            isRecord(message.payload.notebook_position) &&
+            Number.isSafeInteger(message.payload.notebook_position.row) &&
+            message.payload.notebook_position.row >= 0 &&
+            message.payload.notebook_position.row < MAP_SIZE &&
+            Number.isSafeInteger(message.payload.notebook_position.column) &&
+            message.payload.notebook_position.column >= 0 &&
+            message.payload.notebook_position.column < MAP_SIZE &&
+            typeof message.payload.correct === 'boolean' &&
+            Number.isSafeInteger(message.payload.correct_option_index) &&
+            message.payload.correct_option_index >= 0 &&
+            typeof message.payload.explanation === 'string' &&
+            Number.isSafeInteger(message.payload.floor) &&
+            message.payload.floor > 0 &&
+            (message.payload.retry_after_ms === undefined ||
+                (Number.isSafeInteger(message.payload.retry_after_ms) &&
+                    message.payload.retry_after_ms > 0))
+        );
+    }
+
+    if (message.type === 'door.opened') {
+        return (
+            Number.isSafeInteger(message.payload.floor) &&
+            message.payload.floor > 0 &&
+            ['correct_answer', 'all_notebooks_answered'].includes(message.payload.reason)
         );
     }
 

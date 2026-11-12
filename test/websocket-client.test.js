@@ -165,4 +165,50 @@ describe('browser WebSocket client', () => {
         assert.equal(client.reconnectTimer !== null, true);
         client.close();
     });
+
+    it('validates question tile coordinates and answer results', () => {
+        const question = {
+            type: 'question.presented',
+            payload: {
+                question_id: 1,
+                floor: 1,
+                notebook_id: 'floor-1-notebook-1',
+                notebook_label: 1,
+                notebook_position: { row: 8, column: 7 },
+                prompt: 'Question',
+                options: ['A', 'B']
+            }
+        };
+        assert.equal(validateEvent(question), true);
+        assert.equal(
+            validateEvent({
+                ...question,
+                payload: { ...question.payload, notebook_position: { row: 15, column: 7 } }
+            }),
+            false
+        );
+        assert.equal(
+            validateEvent({
+                type: 'answer.result',
+                payload: {
+                    question_id: 1,
+                    notebook_id: 'floor-1-notebook-1',
+                    notebook_label: 1,
+                    notebook_position: { row: 8, column: 7 },
+                    correct: true,
+                    correct_option_index: 0,
+                    explanation: 'Well done.',
+                    floor: 1
+                }
+            }),
+            true
+        );
+        assert.equal(
+            validateEvent({
+                type: 'door.opened',
+                payload: { floor: 1, reason: 'correct_answer' }
+            }),
+            true
+        );
+    });
 });

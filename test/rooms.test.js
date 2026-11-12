@@ -69,6 +69,7 @@ describe('room persistence operations', () => {
             { ...baseRoom, floors: 31 },
             { ...baseRoom, floors: 3.5 },
             { ...baseRoom, notebooks_per_floor: 0 },
+            { ...baseRoom, notebooks_per_floor: 5 },
             { ...baseRoom, notebooks_per_floor: 7 },
             { ...baseRoom, mode: 'unknown' },
             { ...baseRoom, time_limit_seconds: 59 },

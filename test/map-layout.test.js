@@ -3,13 +3,18 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { URL } from 'node:url';
 import {
+    getDoorTiles,
+    getNotebookTiles,
     getTileAt,
     isBlockedAt,
+    isDoorTileAt,
+    isNearTile,
     LOGICAL_TILE_SIZE,
     MAPS,
     MAP_SIZE,
     TILE_TYPES
 } from '../map-layout.js';
+import { movePosition } from '../ws/player-movement.js';
 
 describe('map layout', () => {
     it('uses 15 columns and 15 rows for every notebook configuration', () => {
@@ -37,20 +42,47 @@ describe('map layout', () => {
         }
     });
 
-    it('blocks table collisions on their exact tile coordinates', () => {
+    it('blocks only the upper half of every collidable tile', () => {
         for (const [notebooksPerFloor, map] of Object.entries(MAPS)) {
             for (let row = 0; row < MAP_SIZE; row += 1) {
                 for (let column = 0; column < MAP_SIZE; column += 1) {
-                    if (map[row][column] !== '4') continue;
+                    if (!TILE_TYPES[map[row][column]]?.blocksMovement) continue;
 
-                    const position = {
+                    const positionAt = verticalOffset => ({
                         x: (column + 0.5) * LOGICAL_TILE_SIZE,
-                        y: (row + 0.5) * LOGICAL_TILE_SIZE
-                    };
-                    assert.equal(isBlockedAt(position, Number(notebooksPerFloor)), true);
+                        y: (row + verticalOffset) * LOGICAL_TILE_SIZE
+                    });
+                    assert.equal(isBlockedAt(positionAt(0.25), Number(notebooksPerFloor)), true);
+                    assert.equal(isBlockedAt(positionAt(0.75), Number(notebooksPerFloor)), false);
                 }
             }
         }
+    });
+
+    it('locates notebook tiles and checks proximity to their boundaries', () => {
+        const notebooks = getNotebookTiles(2);
+        assert.equal(notebooks.length, 2);
+        assert.equal(isNearTile({ x: 2, y: 56 }, notebooks[0], 5), true);
+        assert.equal(isNearTile({ x: 2, y: 56 }, notebooks[0], 4), false);
+        assert.equal(isNearTile({ x: 2, y: 56 }, notebooks[1], 5), false);
+    });
+
+    it('identifies door tiles and allows collision-free entry only while open', () => {
+        const doorTiles = getDoorTiles(1);
+        assert.equal(doorTiles.length, 6);
+        assert.deepEqual(doorTiles.slice(3), [
+            { row: 1, column: 6 },
+            { row: 1, column: 7 },
+            { row: 1, column: 8 }
+        ]);
+        assert.equal(isDoorTileAt({ x: 50, y: 10 }, 1), true);
+        assert.equal(isDoorTileAt({ x: 50, y: 20 }, 1), false);
+
+        const start = { x: 50, y: 15 };
+        const closedDoorPosition = movePosition(start, 'north');
+        assert.ok(closedDoorPosition.y < start.y);
+        assert.equal(isDoorTileAt(closedDoorPosition, 1), false);
+        assert.deepEqual(movePosition(start, 'north', { doorOpen: true }), { x: 50, y: 12.5 });
     });
 
     it('applies collision behavior based on each tile type', () => {
@@ -61,9 +93,16 @@ describe('map layout', () => {
 
         assert.equal(isBlockedAt(tileCenter(2, 0)), false);
         assert.equal(isBlockedAt(tileCenter(4, 3)), false);
-        assert.equal(isBlockedAt(tileCenter(0, 0)), true);
-        assert.equal(isBlockedAt(tileCenter(0, 6)), true);
-        assert.equal(isBlockedAt(tileCenter(8, 7)), true);
+        assert.equal(isBlockedAt({ x: tileCenter(0, 0).x, y: LOGICAL_TILE_SIZE * 0.25 }), true);
+        assert.equal(isBlockedAt({ x: tileCenter(0, 6).x, y: LOGICAL_TILE_SIZE * 0.25 }), true);
+        assert.equal(
+            isBlockedAt({
+                x: tileCenter(8, 7).x,
+                y: (8 + 0.25) * LOGICAL_TILE_SIZE
+            }),
+            true
+        );
+        assert.equal(isBlockedAt(tileCenter(8, 7)), false);
     });
 
     it('interprets each map code as its tile type and movement behavior', () => {

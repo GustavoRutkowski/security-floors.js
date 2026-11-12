@@ -37,9 +37,9 @@ export function validateRoomSettings(settings) {
     if (
         !Number.isSafeInteger(settings.notebooks_per_floor) ||
         settings.notebooks_per_floor < 1 ||
-        settings.notebooks_per_floor > 6
+        settings.notebooks_per_floor > 4
     ) {
-        throw new RangeError('notebooks_per_floor must be an integer between 1 and 6');
+        throw new RangeError('notebooks_per_floor must be an integer between 1 and 4');
     }
     if (settings.mode === 'deathmatch' && settings.notebooks_per_floor !== 1) {
         throw new RangeError('deathmatch requires exactly one notebook per floor');

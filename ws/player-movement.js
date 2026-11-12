@@ -26,7 +26,11 @@ function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
 }
 
-export function movePosition(position, direction, { notebooksPerFloor = 1 } = {}) {
+export function movePosition(
+    position,
+    direction,
+    { notebooksPerFloor = 1, doorOpen = false } = {}
+) {
     if (
         !position ||
         !Number.isFinite(position.x) ||
@@ -48,7 +52,7 @@ export function movePosition(position, direction, { notebooksPerFloor = 1 } = {}
             x: clamp(position.x + deltaX * progress, MAP_BOUNDS.minX, MAP_BOUNDS.maxX),
             y: clamp(position.y + deltaY * progress, MAP_BOUNDS.minY, MAP_BOUNDS.maxY)
         };
-        if (isBlockedAt(candidate, notebooksPerFloor, COLLISION_RADIUS)) {
+        if (isBlockedAt(candidate, notebooksPerFloor, COLLISION_RADIUS, { doorOpen })) {
             return lastValidPosition;
         }
         lastValidPosition = candidate;

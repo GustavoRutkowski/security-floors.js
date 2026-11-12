@@ -6,7 +6,7 @@
 - O owner e um UUID de usuario efemero; nao existe persistencia nem tabela de usuarios.
 - Se o owner sair, a sala transfere o ownership para o jogador presente ha mais tempo.
 - A sala e removida quando seu ultimo jogador sai.
-- Andares: inteiro de 3 a 30. Cadernos por andar: inteiro de 1 a 6.
+- Andares: inteiro de 3 a 30. Cadernos por andar: inteiro de 1 a 4.
 - Modos persistidos: `classic` e `deathmatch`. Mata-mata usa exatamente um caderno por andar.
 - `time_limit_seconds` e `NULL` para tempo infinito; caso definido, deve ser pelo menos 60 segundos.
 - A sala admite ao menos um jogador; o limite maximo e configurado por sala. Uma partida exige pelo menos dois jogadores para começar.
@@ -15,9 +15,10 @@
 ## Partidas e questoes
 
 - O servidor WebSocket valida acoes e e a autoridade para o estado compartilhado e o ranking.
-- No classico, o servidor apresenta ao jogador os cadernos do andar na ordem individual sorteada para ele. Uma resposta correta em qualquer caderno avanca imediatamente um andar. Cada caderno so pode ser respondido uma vez por andar; se todas as respostas estiverem erradas, o jogador aguarda 5 segundos e entao avanca automaticamente quando a porta abre.
+- No classico, o servidor apresenta ao jogador os cadernos do andar na ordem individual sorteada para ele. Uma resposta correta em qualquer caderno abre a porta; o jogador avanca ao entrar nela. Cada caderno so pode ser respondido uma vez por andar; se todas as respostas estiverem erradas, a porta abre apos 5 segundos e o jogador deve atravessa-la. A resposta correta no ultimo andar conclui o progresso do jogador.
 - No classico, a partida encerra assim que todos os jogadores concluem o ultimo andar ou quando o limite de tempo e atingido. `time_limit_seconds: null` significa que nao ha cronometro.
 - No mata-mata, cada andar tem exatamente um caderno. Errar elimina imediatamente o jogador e o converte em espectador. Acertar no ultimo andar encerra a partida com esse jogador como vencedor (`questions_exhausted`); eliminar um jogador e deixar exatamente um competidor ativo e conectado encerra com esse sobrevivente como vencedor (`last_player_standing`). Se a expiracao de reconexao eliminar o ultimo competidor ativo, o jogador que acabou de expirar vence por ausencia de adversarios (`last_player_disconnected`). Se todos forem eliminados por resposta incorreta, a partida termina sem vencedor (`no_players_remaining`).
+- No mata-mata, uma resposta correta antes do ultimo andar abre a porta, e o jogador precisa atravessa-la para prosseguir. Uma resposta correta no ultimo andar encerra a partida normalmente.
 - O ranking classico prioriza quem alcanca primeiro o andar final.
 - Questões sao de multipla escolha; verdadeiro/falso e representado por duas alternativas. A resposta correta e armazenada como indice baseado em zero.
 - Questões contem somente `id`, `prompt`, `options`, `correct_option_index` e `explanation`; nao armazenam modo, andar ou caderno.

@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 	owner_id TEXT NOT NULL,
 	mode TEXT NOT NULL CHECK (mode IN ('classic', 'deathmatch')),
 	floors INTEGER NOT NULL CHECK (floors BETWEEN 3 AND 30),
-	notebooks_per_floor INTEGER NOT NULL CHECK (notebooks_per_floor BETWEEN 1 AND 6),
+	notebooks_per_floor INTEGER NOT NULL CHECK (notebooks_per_floor BETWEEN 1 AND 4),
 	time_limit_seconds INTEGER CHECK (time_limit_seconds IS NULL OR time_limit_seconds >= 60),
 	max_players INTEGER NOT NULL CHECK (max_players >= 1),
 	status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'playing')),

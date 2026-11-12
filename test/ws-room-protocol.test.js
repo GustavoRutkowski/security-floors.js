@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { createRoom, updateRoom } from '../db/rooms.js';
+import { getNotebookTiles } from '../map-layout.js';
 import { createPresenceState, getPlayerViewers } from '../ws/presence.js';
 import { eliminatePlayer } from '../ws/room-protocol.js';
 import { startWebSocketServer, closeWebSocketServer } from '../ws/server.js';
@@ -67,6 +68,63 @@ function waitForMessage(client, type, predicate = () => true) {
 
         client.on('message', onMessage);
     });
+}
+
+async function moveUntil(client, userId, match, direction, shouldStop, prefix) {
+    for (let step = 0; step < 100 && !shouldStop(); step += 1) {
+        const movement = match.movement.get(userId);
+        const sequence = movement.sequence + 1;
+        const updatePromise = waitForMessage(
+            client,
+            'player.moved',
+            payload => payload.user_id === userId && payload.sequence === sequence
+        );
+        client.send(
+            JSON.stringify({
+                type: 'player.move',
+                payload: { sequence, direction }
+            })
+        );
+        await updatePromise;
+    }
+    assert.equal(shouldStop(), true, `Movement route did not reach its ${prefix} target`);
+}
+
+async function walkThroughOpenDoor(client, userId, match, prefix) {
+    const progress = match.progress.get(userId);
+    const currentFloor = progress.floor;
+    await moveUntil(
+        client,
+        userId,
+        match,
+        'east',
+        () => match.movement.get(userId).x >= 65,
+        `${prefix} staging x`
+    );
+    await moveUntil(
+        client,
+        userId,
+        match,
+        'north',
+        () => match.movement.get(userId).y <= 18,
+        `${prefix} staging y`
+    );
+    await moveUntil(
+        client,
+        userId,
+        match,
+        'west',
+        () => match.movement.get(userId).x <= 50,
+        `${prefix} doorway x`
+    );
+    await moveUntil(
+        client,
+        userId,
+        match,
+        'north',
+        () => progress.floor !== currentFloor,
+        `${prefix} floor transition`
+    );
 }
 
 function insertQuestions(count) {
@@ -762,7 +820,10 @@ describe('room creation and listing WebSocket events', () => {
                 payload: { question_id: question.question_id, option_index: 0 }
             });
             assert.equal(answer.payload.correct, true);
-            if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+            if (nextQuestionPromise) {
+                await walkThroughOpenDoor(owner, playerId, match, `race-owner-${floor}`);
+                question = (await nextQuestionPromise).payload;
+            }
         }
 
         for (let floor = 1; floor <= 3; floor += 1) {
@@ -775,7 +836,15 @@ describe('room creation and listing WebSocket events', () => {
                 payload: { question_id: guestQuestion.question_id, option_index: 0 }
             });
             assert.equal(answer.payload.correct, true);
-            if (nextQuestionPromise) guestQuestion = (await nextQuestionPromise).payload;
+            if (nextQuestionPromise) {
+                await walkThroughOpenDoor(
+                    guest,
+                    '22222222-2222-4222-8222-222222222222',
+                    match,
+                    `race-guest-${floor}`
+                );
+                guestQuestion = (await nextQuestionPromise).payload;
+            }
         }
 
         const ended = await endedPromise;
@@ -826,7 +895,10 @@ describe('room creation and listing WebSocket events', () => {
                 payload: { question_id: question.question_id, option_index: 0 }
             });
             assert.equal(answer.payload.correct, true);
-            if (nextQuestionPromise) question = (await nextQuestionPromise).payload;
+            if (nextQuestionPromise) {
+                await walkThroughOpenDoor(owner, playerId, match, `completion-owner-${floor}`);
+                question = (await nextQuestionPromise).payload;
+            }
         }
 
         for (let floor = 1; floor <= 3; floor += 1) {
@@ -838,7 +910,15 @@ describe('room creation and listing WebSocket events', () => {
                 payload: { question_id: guestQuestion.question_id, option_index: 0 }
             });
             assert.equal(answer.payload.correct, true);
-            if (nextQuestionPromise) guestQuestion = (await nextQuestionPromise).payload;
+            if (nextQuestionPromise) {
+                await walkThroughOpenDoor(
+                    guest,
+                    '22222222-2222-4222-8222-222222222222',
+                    match,
+                    `completion-guest-${floor}`
+                );
+                guestQuestion = (await nextQuestionPromise).payload;
+            }
         }
 
         const ended = await endedPromise;
@@ -891,6 +971,8 @@ describe('room creation and listing WebSocket events', () => {
         });
         let ownerQuestion = (await initialOwnerQuestion).payload;
         let guestQuestion = (await initialGuestQuestion).payload;
+        assert.deepEqual(ownerQuestion.notebook_position, getNotebookTiles(1)[0]);
+        assert.deepEqual(guestQuestion.notebook_position, getNotebookTiles(1)[0]);
         const initialRanking = (await initialOwnerRanking).payload;
         assert.deepEqual((await initialGuestRanking).payload, initialRanking);
         assert.equal(initialRanking.revision, 1);
@@ -902,12 +984,76 @@ describe('room creation and listing WebSocket events', () => {
         const ownerQuestionTwo = waitForMessage(owner, 'question.presented');
         const ownerRankingTwo = waitForMessage(owner, 'ranking.updated');
         const guestRankingTwo = waitForMessage(guest, 'ranking.updated');
+        const ownerFloorSnapshot = waitForMessage(owner, 'match.snapshot', payload =>
+            payload.players.some(player => player.user_id === playerId && player.floor === 2)
+        );
+        const guestFloorSnapshot = waitForMessage(
+            guest,
+            'match.snapshot',
+            payload =>
+                payload.players.some(player => player.user_id === guestId) &&
+                !payload.players.some(player => player.user_id === playerId)
+        );
         await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'owner-reaches-floor-two',
             payload: { question_id: ownerQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            owner,
+            playerId,
+            server.presence.rooms.get(roomId).match,
+            'rank-owner-one'
+        );
         ownerQuestion = (await ownerQuestionTwo).payload;
+        const ownerSnapshot = (await ownerFloorSnapshot).payload;
+        const guestSnapshot = (await guestFloorSnapshot).payload;
+        const ownerOnNextFloor = ownerSnapshot.players.find(player => player.user_id === playerId);
+        assert.deepEqual(
+            ownerSnapshot.players.map(player => player.user_id),
+            [playerId]
+        );
+        assert.equal(Math.floor(ownerOnNextFloor.x / (100 / 15)), 7);
+        assert.equal(Math.floor(ownerOnNextFloor.y / (100 / 15)), 14);
+        assert.equal(ownerOnNextFloor.floor, 2);
+        assert.equal(ownerOnNextFloor.door_open, false);
+        assert.deepEqual(
+            guestSnapshot.players.map(player => player.user_id),
+            [guestId]
+        );
+        assert.equal(
+            guestSnapshot.players.some(player => player.floor !== 1),
+            false
+        );
+        const ownerFloorMoves = [];
+        const recordOwnerFloorMove = data => {
+            const message = JSON.parse(data.toString('utf8'));
+            if (
+                message.type === 'player.moved' &&
+                message.payload.user_id === playerId &&
+                message.payload.floor === 2
+            ) {
+                ownerFloorMoves.push(message.payload);
+            }
+        };
+        guest.on('message', recordOwnerFloorMove);
+        const match = server.presence.rooms.get(roomId).match;
+        const nextSequence = match.movement.get(playerId).sequence + 1;
+        const ownerMovement = waitForMessage(
+            owner,
+            'player.moved',
+            payload => payload.user_id === playerId && payload.sequence === nextSequence
+        );
+        owner.send(
+            JSON.stringify({
+                type: 'player.move',
+                payload: { sequence: nextSequence, direction: 'east' }
+            })
+        );
+        await ownerMovement;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        guest.off('message', recordOwnerFloorMove);
+        assert.deepEqual(ownerFloorMoves, []);
         const ownerAheadRanking = (await ownerRankingTwo).payload;
         assert.deepEqual((await guestRankingTwo).payload, ownerAheadRanking);
         assert.deepEqual(
@@ -918,12 +1064,26 @@ describe('room creation and listing WebSocket events', () => {
         const guestQuestionTwo = waitForMessage(guest, 'question.presented');
         const ownerRankingThree = waitForMessage(owner, 'ranking.updated');
         const guestRankingThree = waitForMessage(guest, 'ranking.updated');
+        const sameFloorSnapshot = waitForMessage(
+            guest,
+            'match.snapshot',
+            payload =>
+                payload.players.some(player => player.user_id === playerId) &&
+                payload.players.some(player => player.user_id === guestId)
+        );
         await sendRequest(guest, {
             type: 'question.answer',
             request_id: 'guest-reaches-floor-two',
             payload: { question_id: guestQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            guest,
+            guestId,
+            server.presence.rooms.get(roomId).match,
+            'rank-guest-one'
+        );
         guestQuestion = (await guestQuestionTwo).payload;
+        await sameFloorSnapshot;
         const tiedRanking = (await ownerRankingThree).payload;
         assert.deepEqual((await guestRankingThree).payload, tiedRanking);
         assert.equal(tiedRanking.revision, 3);
@@ -949,6 +1109,12 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'owner-reaches-final-floor',
             payload: { question_id: ownerQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            owner,
+            playerId,
+            server.presence.rooms.get(roomId).match,
+            'rank-owner-two'
+        );
         ownerQuestion = (await ownerQuestionThree).payload;
         const finalFloorRanking = (await ownerRankingFour).payload;
         assert.deepEqual((await guestRankingFour).payload, finalFloorRanking);
@@ -974,6 +1140,12 @@ describe('room creation and listing WebSocket events', () => {
             request_id: 'guest-reaches-final-floor',
             payload: { question_id: guestQuestion.question_id, option_index: 0 }
         });
+        await walkThroughOpenDoor(
+            guest,
+            guestId,
+            server.presence.rooms.get(roomId).match,
+            'rank-guest-two'
+        );
         guestQuestion = (await guestQuestionThree).payload;
         assert.equal((await ownerRankingSix).payload.entries[0].user_id, playerId);
         await guestRankingSix;
@@ -1072,7 +1244,9 @@ describe('room creation and listing WebSocket events', () => {
             sequence: 0,
             direction: 'east',
             x: 52.5,
-            y: 80
+            y: 80,
+            floor: 1,
+            door_open: false
         });
 
         const stale = await sendRequest(owner, {
@@ -1137,6 +1311,7 @@ describe('room creation and listing WebSocket events', () => {
         const secondQuestion = (await secondQuestionPromise).payload;
         assert.equal(firstWrongAnswer.payload.correct, false);
         assert.equal(firstWrongAnswer.payload.correct_option_index, 0);
+        assert.equal(firstWrongAnswer.payload.notebook_id, firstQuestion.notebook_id);
         assert.equal(secondQuestion.floor, 1);
         assert.notEqual(secondQuestion.question_id, firstQuestion.question_id);
 
@@ -1163,8 +1338,18 @@ describe('room creation and listing WebSocket events', () => {
             .reverse()
             .find(timer => timer.delay === 5000 && !timer.cleared);
         assert.ok(doorTimer);
-        const floorTwoQuestionPromise = waitForMessage(owner, 'question.presented');
+        const doorOpenedPromise = waitForMessage(owner, 'door.opened');
         doorTimer.callback();
+        const doorOpened = await doorOpenedPromise;
+        assert.equal(doorOpened.payload.floor, 1);
+        assert.equal(doorOpened.payload.reason, 'all_notebooks_answered');
+        const match = server.presence.rooms.get(roomId).match;
+        assert.equal(match.progress.get(playerId).floor, 1);
+        assert.equal(match.progress.get(playerId).doorOpen, true);
+        assert.equal(match.progress.get(playerId).answeredNotebooks.length, 2);
+
+        const floorTwoQuestionPromise = waitForMessage(owner, 'question.presented');
+        await walkThroughOpenDoor(owner, playerId, match, 'classic-floor-one');
         const floorTwoQuestion = (await floorTwoQuestionPromise).payload;
         assert.equal(floorTwoQuestion.floor, 2);
 
@@ -1178,14 +1363,17 @@ describe('room creation and listing WebSocket events', () => {
         assert.equal(floorTwoWrongAnswer.payload.correct, false);
         assert.equal(floorTwoNotebook.floor, 2);
 
-        const floorThreeQuestionPromise = waitForMessage(owner, 'question.presented');
         const floorTwoCorrectAnswer = await sendRequest(owner, {
             type: 'question.answer',
             request_id: 'classic-floor-two-second-correct',
             payload: { question_id: floorTwoNotebook.question_id, option_index: 0 }
         });
-        const floorThreeQuestion = (await floorThreeQuestionPromise).payload;
         assert.equal(floorTwoCorrectAnswer.payload.correct, true);
+        assert.equal(floorTwoCorrectAnswer.payload.door_open, true);
+        assert.equal(match.progress.get(playerId).floor, 2);
+        const floorThreeQuestionPromise = waitForMessage(owner, 'question.presented');
+        await walkThroughOpenDoor(owner, playerId, match, 'classic-floor-two');
+        const floorThreeQuestion = (await floorThreeQuestionPromise).payload;
         assert.equal(floorThreeQuestion.floor, 3);
     });
 
@@ -1336,6 +1524,7 @@ describe('room creation and listing WebSocket events', () => {
             });
             assert.equal(answer.payload.correct, true);
             if (nextQuestionPromise) {
+                await walkThroughOpenDoor(owner, playerId, match, `deathmatch-floor-${floor}`);
                 question = (await nextQuestionPromise).payload;
                 assert.equal(question.floor, floor + 1);
             }

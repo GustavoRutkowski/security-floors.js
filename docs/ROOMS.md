@@ -17,7 +17,7 @@ Para criar uma sala o usuário deve:
 - Criar uma sala com o botão "+"
 - Configurar regras (quantos andares, quantos cadernos por andar, modo de jogo, tempo, limite de players, etc...)
     - Os andares devem ser um valor inteiro de 3 a 30
-    - A quantidade de cadernos por andar deve ser um inteiro de 1 a 6
+    - A quantidade de cadernos por andar deve ser um inteiro de 1 a 4
     - O modo de jogo deve ser "clássico" ou "mata-mata"
     - O tempo (em segundos) pode ser qualquer tempo a partir de 1 minuto e também pode ser setado como "infinito"
     - Limite de players (quantidade máxima de jogadores que podem entrar na sala)

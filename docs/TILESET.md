@@ -30,11 +30,17 @@ andar anterior, conforme o estado enviado pelo servidor.
 
 Na colisão, cada célula é interpretada pelo seu tipo: `0` (piso) e `3`
 (surgimento) permitem passagem; `1` (parede), `2` (porta) e `4` (caderno)
-bloqueiam o movimento. A colisão considera o volume do personagem contra os
-limites do tile, e o movimento termina na última posição livre antes do
-obstáculo.
+têm colisão somente na metade superior do tile, considerando a perspectiva
+oblíqua. A metade inferior permite passagem. A colisão considera o volume do
+personagem contra essa área, e o movimento termina na última posição livre
+antes do obstáculo.
 
 ## Mapas por quantidade de cadernos
+
+Salas configuram de um a quatro cadernos por andar; cada quantidade possui um
+mapa correspondente abaixo. Para interagir, o cliente usa a posição do tile
+informada com a questão atual e mantém a interação dentro do canvas e do
+teclado.
 
 As matrizes abaixo são mapas de referência. Os espaços em branco não fazem
 parte das matrizes e cada linha deve permanecer com 15 caracteres.
@@ -152,5 +158,8 @@ composição inteira; ele não deve ser interpretado como seis células
 independentes nem substituído por seis códigos diferentes no mapa.
 
 O estado visual da porta deve acompanhar o estado autoritativo recebido do
-servidor. A spritesheet também contém os estados necessários para uma
-animação, mas a regra que libera a passagem pertence à lógica da partida.
+servidor. Ao abrir, a cena anima a composição `DOOR_LOCKED` → `DOOR_MID` →
+`DOOR_OPEN`; a regra que libera a passagem pertence à lógica da partida.
+Os índices de matriz usados pelo protocolo e pela implementação começam em
+zero: a porta ocupa `[0..1][6..8]`. Quando o servidor confirma a travessia,
+o jogador entra no próximo andar no tile `[14][7]`.
