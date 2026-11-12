@@ -3,6 +3,8 @@
     { "id": "carlos", "name": "CARLOS", "sprite": "carlos.png" },
     { "id": "dr.vultu", "name": "DR. VULTU", "sprite": "dr.vultu.png" },
     { "id": "eteubaldo", "name": "ETEUBALDO", "sprite": "eteubaldo.png" },
+    { "id": "gatol", "name": "GATOL", "sprite": "gatol.png" },
+    { "id": "leria", "name": "LERIA", "sprite": "leria.png" },
     { "id": "lixaredo", "name": "LIXAREDO", "sprite": "lixaredo.png" },
     { "id": "nefasto", "name": "NEFASTO", "sprite": "nefasto.png" },
     { "id": "plantosca", "name": "PLANTOSCA", "sprite": "plantosca.png" },
